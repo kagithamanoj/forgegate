@@ -9,7 +9,7 @@ any request leaves the process.
 from __future__ import annotations
 
 from . import __version__
-from .models import ApiEstate, AuthPolicy, Endpoint
+from .models import ApiEstate, Endpoint
 
 PY_TYPES = {
     "string": "str",
@@ -83,37 +83,39 @@ if __name__ == "__main__":
 '''
 
 
-def _auth_helper(auth: AuthPolicy) -> str:
-    if auth.kind == "apiKey":
-        lines = [
-            "def _auth_headers():",
-            f'    """Inject the inherited {auth.name} API key."""',
-            f'    key = os.environ.get("OXVARA_API_KEY", "")',
-        ]
-        if auth.location == "query":
-            lines.append("    return {}  # key is sent as a query param, see below")
-        else:
-            lines.append(f'    return {{"{auth.name}": key}} if key else {{}}')
-        return "\n".join(lines) + "\n\n\n"
-    if auth.kind == "bearer":
-        return (
-            "def _auth_headers():\n"
-            '    """Inject the inherited bearer token."""\n'
-            '    token = os.environ.get("OXVARA_BEARER_TOKEN", "")\n'
-            '    return {"Authorization": "Bearer " + token} if token else {}\n'
-            "\n\n"
+def _q(value: str) -> str:
+    """Escape a string for embedding in a double-quoted Python literal."""
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+AUTH_DISPATCH = '''def _auth_headers(kind, name, location):
+    """Inject the credentials inherited from the API estate for one tool.
+
+    Credentials always come from the environment, never from the spec:
+    OXVARA_API_KEY, OXVARA_BEARER_TOKEN, OXVARA_BASIC_CREDENTIALS.
+    """
+    if kind == "apiKey":
+        key = os.environ.get("OXVARA_API_KEY", "")
+        if not key:
+            return {}
+        if location == "query":
+            return {}  # sent as a query param, see the tool body
+        return {name: key}
+    if kind == "bearer":
+        token = os.environ.get("OXVARA_BEARER_TOKEN", "")
+        return {"Authorization": "Bearer " + token} if token else {}
+    if kind == "basic":
+        creds = os.environ.get("OXVARA_BASIC_CREDENTIALS", "")
+        return {"Authorization": "Basic " + creds} if creds else {}
+    if kind == "oauth2":
+        raise NotImplementedError(
+            "oauth2 token acquisition is not implemented in this "
+            "prototype; see docs/ARCHITECTURE.md"
         )
-    if auth.kind == "oauth2":
-        return (
-            "def _auth_headers():\n"
-            '    """OAuth2 is declared by the estate but not wired up yet."""\n'
-            "    raise NotImplementedError(\n"
-            '        "oauth2 token acquisition is not implemented in this "\n'
-            '        "prototype; see docs/ARCHITECTURE.md"\n'
-            "    )\n"
-            "\n\n"
-        )
-    return "def _auth_headers():\n    return {}\n\n\n"
+    return {}
+
+
+'''
 
 
 def _unique_tool_names(estate: ApiEstate) -> dict[str, str]:
@@ -166,7 +168,11 @@ def _generate_tool(ep: Endpoint, tool_name: str) -> str:
     out.append(_docstring(ep).rstrip("\n"))
     out.append(f'    _check_rate_limit("{tool_name}")')
     out.append('    headers = {"Accept": "application/json"}')
-    out.append("    headers.update(_auth_headers())")
+    auth = ep.policy.auth
+    out.append(
+        f'    headers.update(_auth_headers("{_q(auth.kind)}", '
+        f'"{_q(auth.name)}", "{_q(auth.location)}"))'
+    )
 
     query_params = [p for p in ep.parameters if p.location == "query"]
     if query_params:
@@ -234,8 +240,7 @@ def generate_server(estate: ApiEstate, filename: str = "server.py") -> str:
             )
     parts.append(RATE_LIMITER.format(entries="\n".join(entries)))
 
-    auth = estate.endpoints[0].policy.auth if estate.endpoints else AuthPolicy()
-    parts.append(_auth_helper(auth))
+    parts.append(AUTH_DISPATCH)
     parts.append(f'mcp = FastMCP("{estate.slug}")\n\n\n')
 
     for ep in estate.endpoints:

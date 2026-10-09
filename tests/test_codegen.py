@@ -47,3 +47,44 @@ def test_generated_source_mentions_regeneration():
 def test_path_parameter_is_substituted_into_url():
     src = _source()
     assert 'url = f"{BASE_URL}/pets/{petId}"' in src
+
+
+def test_each_tool_gets_its_own_auth_call():
+    from oxvara.models import (
+        ApiEstate,
+        AuthPolicy,
+        Endpoint,
+        Policy,
+    )
+
+    estate = ApiEstate(
+        title="Mixed", slug="mixed", version="1", base_url="https://x.example"
+    )
+    estate.endpoints.append(
+        Endpoint(
+            operation_id="a",
+            tool_name="mixed_a",
+            method="GET",
+            path="/a",
+            summary="a",
+            description="",
+            policy=Policy(auth=AuthPolicy(kind="apiKey", name="X-Key", location="header")),
+        )
+    )
+    estate.endpoints.append(
+        Endpoint(
+            operation_id="b",
+            tool_name="mixed_b",
+            method="GET",
+            path="/b",
+            summary="b",
+            description="",
+            policy=Policy(auth=AuthPolicy(kind="bearer")),
+        )
+    )
+    src = generate_server(estate, filename="mixed.py")
+    ast.parse(src)
+    assert 'headers.update(_auth_headers("apiKey", "X-Key", "header"))' in src
+    assert 'headers.update(_auth_headers("bearer", "", "header"))' in src
+    # the old bug generated one shared _auth_headers() call for every tool
+    assert "_auth_headers()" not in src
