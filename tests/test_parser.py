@@ -79,3 +79,10 @@ def test_non_openapi_3_spec_is_rejected():
 def test_empty_spec_is_rejected():
     with pytest.raises(ValueError, match="no operations"):
         parse_spec('openapi: "3.0.0"\ninfo:\n  title: empty\npaths: {}')
+
+
+def test_parse_auth_accepts_basic_kind():
+    from oxvara.parser import _parse_auth
+
+    auth = _parse_auth({"kind": "basic"})
+    assert auth.kind == "basic"

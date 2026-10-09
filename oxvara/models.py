@@ -21,7 +21,7 @@ class RateLimit:
 
 @dataclass
 class AuthPolicy:
-    kind: str = "none"  # "apiKey" | "bearer" | "oauth2" | "none"
+    kind: str = "none"  # "apiKey" | "bearer" | "basic" | "oauth2" | "none"
     name: str = ""  # header or query name for apiKey
     location: str = "header"  # "header" | "query"
 

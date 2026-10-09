@@ -22,7 +22,6 @@ Example:
 from __future__ import annotations
 
 import json
-import re
 
 import yaml
 
@@ -35,20 +34,9 @@ from .models import (
     Policy,
     RateLimit,
 )
+from .util import camel_to_snake, slugify
 
 HTTP_METHODS = {"get", "put", "post", "delete", "patch", "head", "options"}
-
-
-def _slugify(text: str) -> str:
-    slug = re.sub(r"[^a-z0-9]+", "_", text.lower()).strip("_")
-    return slug or "api"
-
-
-def _camel_to_snake(name: str) -> str:
-    name = re.sub(r"[^a-zA-Z0-9]", "_", name)
-    name = re.sub(r"(.)([A-Z][a-z]+)", r"\1_\2", name)
-    name = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", name)
-    return name.lower().strip("_") or "operation"
 
 
 def _parse_rate_limit(raw: dict | None) -> RateLimit | None:
@@ -65,7 +53,7 @@ def _parse_auth(raw: dict | None) -> AuthPolicy:
     if not raw:
         return AuthPolicy(kind="none")
     kind = str(raw.get("kind", "none")).lower()
-    if kind not in ("apikey", "bearer", "oauth2", "none"):
+    if kind not in ("apikey", "bearer", "basic", "oauth2", "none"):
         raise ValueError(f"unsupported x-oxvara auth kind: {kind!r}")
     kind = "apiKey" if kind == "apikey" else kind
     return AuthPolicy(
@@ -105,7 +93,7 @@ def parse_spec(text: str) -> ApiEstate:
 
     info = doc.get("info", {}) or {}
     title = str(info.get("title", "API"))
-    slug = _slugify(title)
+    slug = slugify(title)
     version = str(info.get("version", "0"))
 
     default_policy = _parse_policy(doc.get("x-oxvara"))
@@ -153,7 +141,7 @@ def _parse_operation(
         operation.get("operationId")
         or f"{method}_{path}".replace("/", "_").strip("_")
     )
-    tool_name = f"{slug}_{_camel_to_snake(operation_id)}"
+    tool_name = f"{slug}_{camel_to_snake(operation_id)}"
     policy = default_policy.merge(_parse_policy(operation.get("x-oxvara")))
 
     parameters: list[Parameter] = []

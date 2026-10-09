@@ -88,3 +88,32 @@ def test_each_tool_gets_its_own_auth_call():
     assert 'headers.update(_auth_headers("bearer", "", "header"))' in src
     # the old bug generated one shared _auth_headers() call for every tool
     assert "_auth_headers()" not in src
+
+
+def test_basic_auth_generates_env_credential_injection():
+    from oxvara.codegen import generate_server
+    from oxvara.models import (
+        ApiEstate,
+        AuthPolicy,
+        Endpoint,
+        Policy,
+    )
+
+    estate = ApiEstate(
+        title="Basic", slug="basic", version="1", base_url="https://x.example"
+    )
+    estate.endpoints.append(
+        Endpoint(
+            operation_id="a",
+            tool_name="basic_a",
+            method="GET",
+            path="/a",
+            summary="a",
+            description="",
+            policy=Policy(auth=AuthPolicy(kind="basic")),
+        )
+    )
+    src = generate_server(estate, filename="basic.py")
+    ast.parse(src)
+    assert "OXVARA_BASIC_CREDENTIALS" in src
+    assert '"Basic " + creds' in src
