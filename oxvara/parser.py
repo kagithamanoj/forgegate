@@ -21,8 +21,6 @@ Example:
 
 from __future__ import annotations
 
-import json
-
 import yaml
 
 from .models import (
@@ -84,7 +82,7 @@ def parse_spec(text: str) -> ApiEstate:
     except yaml.YAMLError as exc:
         raise ValueError(f"could not parse spec: {exc}") from exc
     if not isinstance(doc, dict):
-        raise ValueError("spec must be a mapping")
+        raise TypeError("spec must be a mapping")
     openapi = str(doc.get("openapi", ""))
     if not openapi.startswith("3."):
         raise ValueError(

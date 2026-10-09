@@ -32,7 +32,7 @@ class Policy:
     rate_limit: RateLimit | None = None
     timeout: int = 30
 
-    def merge(self, override: "Policy") -> "Policy":
+    def merge(self, override: Policy) -> Policy:
         """Return a new Policy where the override fills in anything it sets."""
         auth = override.auth if override.auth.kind != "none" else self.auth
         rate_limit = override.rate_limit or self.rate_limit

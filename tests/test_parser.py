@@ -51,12 +51,12 @@ def test_path_and_query_parameters():
     get_pet = by_op["getPet"]
     assert get_pet.method == "GET"
     assert get_pet.path == "/pets/{petId}"
-    pet_id = [p for p in get_pet.parameters if p.name == "petId"][0]
+    pet_id = next(p for p in get_pet.parameters if p.name == "petId")
     assert pet_id.location == "path"
     assert pet_id.required is True
 
     list_pets = by_op["listPets"]
-    limit = [p for p in list_pets.parameters if p.name == "limit"][0]
+    limit = next(p for p in list_pets.parameters if p.name == "limit")
     assert limit.location == "query"
     assert limit.schema_type == "integer"
     assert limit.required is False

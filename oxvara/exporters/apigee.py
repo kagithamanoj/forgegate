@@ -39,6 +39,7 @@ from ..models import (
     Endpoint,
     Parameter,
     Policy,
+    RateLimit,
 )
 from ..util import camel_to_snake, normalize_rate, path_params, slugify
 

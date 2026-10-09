@@ -157,7 +157,7 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         return args.func(args)
-    except (ValueError, OSError) as exc:
+    except (ValueError, TypeError, OSError) as exc:
         print(f"oxvara: error: {exc}", file=sys.stderr)
         return 1
 

@@ -5,7 +5,6 @@ import os
 import pytest
 
 from oxvara.cli import build_parser
-from oxvara.inputs import load_input
 from oxvara.models import (
     ApiEstate,
     AuthPolicy,

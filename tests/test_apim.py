@@ -2,7 +2,6 @@
 
 import os
 import textwrap
-import xml.etree.ElementTree as ET
 
 import pytest
 

@@ -113,7 +113,7 @@ def load_apim(apim_dir: str) -> Policy:
         except yaml.YAMLError as exc:
             raise ValueError(f"could not parse {openapi_path}: {exc}") from exc
     if not isinstance(doc, dict):
-        raise ValueError(f"{openapi_path} must contain a mapping")
+        raise TypeError(f"{openapi_path} must contain a mapping")
 
     api_policy = _inbound_policy(os.path.join(apim_dir, "policy.xml"))
     estate = parse_document(doc, api_policy, _servers_base_url(doc))
