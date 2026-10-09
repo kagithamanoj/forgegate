@@ -103,7 +103,7 @@ Auth kinds and their credential sources in generated servers:
 | `apiKey` | `OXVARA_API_KEY` | Header (or query param) named by `auth.name` |
 | `bearer` | `OXVARA_BEARER_TOKEN` | `Authorization: Bearer <token>` |
 | `basic` | `OXVARA_BASIC_CREDENTIALS` | `Authorization: Basic <base64(user:password)>` |
-| `oauth2` | n/a | Declared, not wired up: the tool raises `NotImplementedError` |
+| `oauth2` | `OXVARA_OAUTH_ACCESS_TOKEN` (delegated token), or `OXVARA_OAUTH_TOKEN_URL` + `_CLIENT_ID` + `_CLIENT_SECRET` [+ `_SCOPE`] | `Authorization: Bearer <token>`; client-credentials tokens are cached until expiry |
 | `none` | n/a | No credentials |
 
 ## Commands
@@ -140,10 +140,22 @@ store so limits hold across server replicas, and response validation
 against the OpenAPI schemas. The roadmap in
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) has the details.
 
-What is deliberately not faked: OAuth2 token acquisition is declared
-but not implemented, and the generated code raises instead of
-pretending. Anything else marked "not implemented" in the docs is
-exactly that.
+What is deliberately not faked: OAuth2 supports delegated token
+passthrough and the client-credentials grant only. Authorization-code /
+token-exchange (RFC 8693) flows for per-user delegation are not built.
+Anything else marked "not implemented" in the docs is exactly that.
+
+## Security model of generated servers
+
+- **Audit log**: every call and response status is written as JSON lines
+  to `OXVARA_AUDIT_LOG` (default stderr). Argument values under
+  secret-looking keys are redacted; credentials are never logged.
+- **Argument injection**: path parameters are percent-encoded, so a value
+  like `../admin` cannot add path segments.
+- **Untrusted output**: upstream responses are size-capped
+  (`OXVARA_MAX_RESPONSE_CHARS`) and labeled as untrusted data. This
+  reduces, but does not eliminate, prompt-injection risk from hostile
+  API responses.
 
 ## Development
 

@@ -46,7 +46,7 @@ def test_generated_source_mentions_regeneration():
 
 def test_path_parameter_is_substituted_into_url():
     src = _source()
-    assert 'url = f"{BASE_URL}/pets/{petId}"' in src
+    assert 'url = BASE_URL + _fill_path("/pets/{petId}", {"petId": petId})' in src
 
 
 def test_each_tool_gets_its_own_auth_call():

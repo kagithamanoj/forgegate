@@ -58,8 +58,9 @@ def _warnings(estate: ApiEstate) -> list[str]:
             warnings.append(f"{label} has no auth configured")
         if ep.policy.auth.kind == "oauth2":
             warnings.append(
-                f"{label} uses oauth2, which the generated server does not "
-                "implement yet (it will raise NotImplementedError)"
+                f"{label} uses oauth2; set OXVARA_OAUTH_ACCESS_TOKEN or the "
+                "OXVARA_OAUTH_TOKEN_URL/CLIENT_ID/CLIENT_SECRET variables "
+                "before running the generated server"
             )
         if ep.policy.rate_limit is None:
             warnings.append(f"{label} has no rate limit configured")

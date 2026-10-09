@@ -84,4 +84,4 @@ def test_diff_flags_oauth2_as_unimplemented(capsys, tmp_path):
     assert args.func(args) == 0
     out = capsys.readouterr().out
     assert "oauth2" in out
-    assert "NotImplementedError" in out
+    assert "OXVARA_OAUTH_TOKEN_URL" in out

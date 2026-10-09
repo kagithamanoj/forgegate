@@ -22,6 +22,7 @@ EXAMPLE = os.path.join(
 class FakeResponse:
     def __init__(self, text="[]"):
         self.text = text
+        self.status_code = 200
 
     def raise_for_status(self):
         return None
@@ -94,3 +95,67 @@ def test_all_three_tools_are_registered(server_module):
         "petstore_create_pet",
         "petstore_get_pet",
     }
+
+
+def test_path_value_cannot_traverse(server_module):
+    server_module.petstore_get_pet(petId="../admin?x=1")
+    url = server_module._calls[-1]["url"]
+    assert url.endswith("/pets/..%2Fadmin%3Fx%3D1")
+
+
+def test_response_is_labeled_untrusted_and_capped(server_module, monkeypatch):
+    import requests
+
+    big = "x" * 50000
+    monkeypatch.setattr(requests, "request", lambda *a, **k: FakeResponse(big))
+    out = server_module.petstore_list_pets()
+    assert out.startswith("[oxvara: untrusted API response")
+    assert "response truncated" in out
+    assert len(out) < 21000
+
+
+def test_audit_log_redacts_secrets(server_module, tmp_path, monkeypatch):
+    log = tmp_path / "audit.jsonl"
+    monkeypatch.setenv("OXVARA_AUDIT_LOG", str(log))
+    server_module._audit("call", "t", args=server_module._redact({"api_key": "s3", "q": "ok"}))
+    text = log.read_text()
+    assert "s3" not in text and '"q": "ok"' in text
+
+
+def test_oauth2_client_credentials_cached(server_module, monkeypatch):
+    import requests
+
+    posts = []
+
+    class Tok:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"access_token": "tok-1", "expires_in": 3600}
+
+    def fake_post(url, **kw):
+        posts.append((url, kw))
+        return Tok()
+
+    monkeypatch.setattr(requests, "post", fake_post)
+    monkeypatch.setenv("OXVARA_OAUTH_TOKEN_URL", "https://idp.test/token")
+    monkeypatch.setenv("OXVARA_OAUTH_CLIENT_ID", "id")
+    monkeypatch.setenv("OXVARA_OAUTH_CLIENT_SECRET", "sec")
+    assert server_module._auth_headers("oauth2", "", "") == {"Authorization": "Bearer tok-1"}
+    server_module._auth_headers("oauth2", "", "")
+    assert len(posts) == 1
+    assert posts[0][1]["data"]["grant_type"] == "client_credentials"
+
+
+def test_oauth2_delegated_token_wins(server_module, monkeypatch):
+    monkeypatch.setenv("OXVARA_OAUTH_ACCESS_TOKEN", "user-tok")
+    assert server_module._auth_headers("oauth2", "", "") == {"Authorization": "Bearer user-tok"}
+
+
+def test_oauth2_unconfigured_fails_loudly(server_module, monkeypatch):
+    for v in ("ACCESS_TOKEN", "TOKEN_URL", "CLIENT_ID", "CLIENT_SECRET"):
+        monkeypatch.delenv("OXVARA_OAUTH_" + v, raising=False)
+    server_module._oauth_cache["token"] = ""
+    with pytest.raises(server_module.OxvaraError):
+        server_module._auth_headers("oauth2", "", "")

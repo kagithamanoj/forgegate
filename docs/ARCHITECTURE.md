@@ -95,9 +95,9 @@ x-oxvara:
   timeout: 30         # seconds
 ```
 
-OAuth2 is recognized by the parser but the generated server raises
-`NotImplementedError` for it: token acquisition against an enterprise
-identity provider is real work and the prototype does not fake it.
+OAuth2 is supported via delegated token passthrough or the
+client-credentials grant. Authorization-code and RFC 8693 token exchange
+(true per-user delegation) are on the roadmap.
 
 ## What this prototype does not do yet
 
