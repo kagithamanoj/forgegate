@@ -1,0 +1,77 @@
+openapi: 3.0.3
+info:
+  title: Petstore
+  version: 1.0.0
+  description: A tiny example API used to demonstrate Oxvara.
+
+x-oxvara:
+  baseUrl: https://petstore.example.com/api/v1
+  auth:
+    kind: apiKey
+    name: X-API-Key
+    in: header
+  rateLimit:
+    requests: 100
+    per: minute
+  timeout: 30
+
+paths:
+  /pets:
+    get:
+      operationId: listPets
+      summary: List all pets
+      description: Returns every pet in the store, optionally filtered by status.
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: A list of pets
+    post:
+      operationId: createPet
+      summary: Create a pet
+      description: Adds a new pet to the store.
+      x-oxvara:
+        rateLimit:
+          requests: 10
+          per: minute
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                tag:
+                  type: string
+      responses:
+        "201":
+          description: The created pet
+  /pets/{petId}:
+    get:
+      operationId: getPet
+      summary: Get a pet by id
+      description: Returns a single pet.
+      parameters:
+        - name: petId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: A pet
+        "404":
+          description: Not found
