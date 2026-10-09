@@ -4,15 +4,15 @@ import os
 
 import pytest
 
-from avouch.cli import build_parser
-from avouch.models import (
+from oxvara.cli import build_parser
+from oxvara.models import (
     ApiEstate,
     AuthPolicy,
     Endpoint,
     Policy,
     RateLimit,
 )
-from avouch.packs import run_pack, strict_pack
+from oxvara.packs import run_pack, strict_pack
 
 EXAMPLES = os.path.join(os.path.dirname(__file__), "..", "examples")
 
@@ -112,7 +112,7 @@ def test_validate_rejects_unknown_pack(capsys):
     with pytest.raises(ValueError, match="unknown policy pack"):
         args.func(args)
     # main() converts it to exit code 1
-    from avouch.cli import main
+    from oxvara.cli import main
 
     assert main(["validate", "--pack", "nope",
                  os.path.join(EXAMPLES, "petstore.yaml")]) == 1

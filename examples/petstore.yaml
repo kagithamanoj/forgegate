@@ -2,9 +2,9 @@ openapi: 3.0.3
 info:
   title: Petstore
   version: 1.0.0
-  description: A tiny example API used to demonstrate Avouch.
+  description: A tiny example API used to demonstrate Oxvara.
 
-x-avouch:
+x-oxvara:
   baseUrl: https://petstore.example.com/api/v1
   auth:
     kind: apiKey
@@ -39,7 +39,7 @@ paths:
       operationId: createPet
       summary: Create a pet
       description: Adds a new pet to the store.
-      x-avouch:
+      x-oxvara:
         rateLimit:
           requests: 10
           per: minute
