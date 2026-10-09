@@ -101,8 +101,8 @@ identity provider is real work and the prototype does not fake it.
 
 ## What this prototype does not do yet
 
-- No Apigee or Azure APIM exporters. The input is OpenAPI plus
-  annotations; vendor exporters are the next milestone.
+- No Kong exporter yet. Apigee and Azure APIM exporters are built and
+  tested (see `oxvara/exporters/`).
 - No response schema validation and no retry logic in generated servers.
 - The rate limiter is per-process and in-memory. A shared budget store
   is on the roadmap.
@@ -111,11 +111,10 @@ identity provider is real work and the prototype does not fake it.
 
 ## Roadmap
 
-1. Apigee X and Azure APIM exporters: pull specs and policies straight
-   from the gateway instead of hand-annotating YAML.
-2. Policy packs: named, reusable policy bundles (for example a
-   read-only pack that refuses to compile mutating operations).
-3. Dry-run and diff mode: show what would change in the generated
-   server before writing it.
-4. Shared rate budget store (Redis) for multi-replica deployments.
-5. Response validation against the OpenAPI response schemas.
+1. ~~Apigee X and Azure APIM exporters~~ Done.
+2. ~~Policy packs~~ Done (`strict` ships; more packs to come, for
+   example per-team budgets and data-classification rules).
+3. ~~Dry-run and diff mode~~ Done (`oxvara diff`, `oxvara validate`).
+4. Kong exporter: the third major gateway.
+5. Shared rate budget store (Redis) for multi-replica deployments.
+6. Response validation against the OpenAPI response schemas.
