@@ -1,5 +1,5 @@
 [project]
-name = "avouch"
+name = "oxvara"
 version = "0.1.0"
 description = "Vendor-neutral control plane for agentic access to your API estate"
 readme = "README.md"
@@ -19,7 +19,7 @@ dev = ["pytest>=8.0", "ruff>=0.4"]
 line-length = 100
 
 [project.scripts]
-avouch = "avouch.cli:main"
+oxvara = "oxvara.cli:main"
 
 [build-system]
 requires = ["setuptools>=61"]
