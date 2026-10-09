@@ -1,0 +1,51 @@
+openapi: 3.0.1
+info:
+  title: Petstore
+  version: v1
+  description: Petstore API as exported from Azure API Management
+servers:
+  - url: https://petstore-apim.azure-api.net/petstore
+paths:
+  /pets:
+    get:
+      operationId: listPets
+      summary: List all pets
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+    post:
+      operationId: createPet
+      summary: Add a new pet
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                tag:
+                  type: string
+      responses:
+        '201':
+          description: Created
+  /pets/{petId}:
+    get:
+      operationId: getPet
+      summary: Fetch one pet by id
+      parameters:
+        - name: petId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK

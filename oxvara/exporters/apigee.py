@@ -39,9 +39,8 @@ from ..models import (
     Endpoint,
     Parameter,
     Policy,
-    RateLimit,
 )
-from ..util import camel_to_snake, path_params, slugify
+from ..util import camel_to_snake, normalize_rate, path_params, slugify
 
 _VERB_RE = re.compile(r'request\.verb\s*=\s*"([A-Za-z]+)"')
 _PATH_RE = re.compile(r'proxy\.pathsuffix\s+MatchesPath\s+"([^"]+)"')
@@ -55,23 +54,6 @@ _TIME_UNITS = {
     "day": 86400,
     "month": 2592000,  # 30 days, Apigee's documented approximation
 }
-
-
-def _normalize_rate(requests: int, window_seconds: int) -> RateLimit | None:
-    """Fit an arbitrary (requests, window) pair into the model."""
-    if requests <= 0 or window_seconds <= 0:
-        return None
-    if window_seconds <= 1:
-        return RateLimit(requests=requests, per="second")
-    if window_seconds <= 60:
-        return RateLimit(
-            requests=max(1, round(requests * 60 / window_seconds)),
-            per="minute",
-        )
-    return RateLimit(
-        requests=max(1, round(requests * 3600 / window_seconds)),
-        per="hour",
-    )
 
 
 def _text(root: ET.Element, path: str) -> str:
@@ -111,7 +93,7 @@ def _parse_quota(policy: ET.Element) -> RateLimit | None:
     unit = _text(policy, "TimeUnit").lower() or "minute"
     try:
         window = int(interval or "1") * _TIME_UNITS.get(unit, 60)
-        return _normalize_rate(int(count), window)
+        return normalize_rate(int(count), window)
     except ValueError:
         return None
 
@@ -122,7 +104,7 @@ def _parse_spike_arrest(policy: ET.Element) -> RateLimit | None:
         return None
     requests = int(match.group(1))
     window = 1 if match.group(2).lower() == "s" else 60
-    return _normalize_rate(requests, window)
+    return normalize_rate(requests, window)
 
 
 def _policy_from_file(path: str) -> Policy:

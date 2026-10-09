@@ -1,0 +1,16 @@
+<policies>
+    <inbound>
+        <base />
+        <check-header name="Ocp-Apim-Subscription-Key" failed-check-httpcode="401" failed-check-error-message="Missing subscription key" ignore-case="false" />
+        <rate-limit-by-key calls="200" renewal-period="60" counter-key="@(context.Subscription.Id)" />
+    </inbound>
+    <backend>
+        <base />
+    </backend>
+    <outbound>
+        <base />
+    </outbound>
+    <on-error>
+        <base />
+    </on-error>
+</policies>

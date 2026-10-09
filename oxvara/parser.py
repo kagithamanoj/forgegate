@@ -91,17 +91,32 @@ def parse_spec(text: str) -> ApiEstate:
             f"oxvara currently supports OpenAPI 3.x, got {openapi!r}"
         )
 
+    default_policy = _parse_policy(doc.get("x-oxvara"))
+    base_url = str((doc.get("x-oxvara") or {}).get("baseUrl", ""))
+    if not base_url:
+        base_url = _servers_base_url(doc)
+    return parse_document(doc, default_policy, base_url)
+
+
+def _servers_base_url(doc: dict) -> str:
+    servers = doc.get("servers") or []
+    if servers and isinstance(servers[0], dict):
+        return str(servers[0].get("url", ""))
+    return ""
+
+
+def parse_document(
+    doc: dict, default_policy: Policy, base_url: str = ""
+) -> ApiEstate:
+    """Build an ApiEstate from an already-loaded OpenAPI 3.x document.
+
+    Exporters use this to reuse operation parsing while supplying the
+    default policy and base URL from the vendor's own metadata.
+    """
     info = doc.get("info", {}) or {}
     title = str(info.get("title", "API"))
     slug = slugify(title)
     version = str(info.get("version", "0"))
-
-    default_policy = _parse_policy(doc.get("x-oxvara"))
-    base_url = str((doc.get("x-oxvara") or {}).get("baseUrl", ""))
-    if not base_url:
-        servers = doc.get("servers") or []
-        if servers and isinstance(servers[0], dict):
-            base_url = str(servers[0].get("url", ""))
 
     estate = ApiEstate(
         title=title, slug=slug, version=version, base_url=base_url
