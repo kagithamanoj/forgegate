@@ -9,6 +9,7 @@ from . import __version__
 from .codegen import write_server
 from .inputs import detect_source, load_input
 from .models import ApiEstate
+from .packs import run_pack
 
 
 def _auth_desc(ep) -> str:
@@ -84,6 +85,18 @@ def cmd_diff(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_validate(args: argparse.Namespace) -> int:
+    estate = load_input(args.input)
+    violations = run_pack(estate, args.pack)
+    if not violations:
+        print(f"{args.pack}: {len(estate.endpoints)} operations, no violations")
+        return 0
+    print(f"{args.pack}: {len(violations)} violation(s)")
+    for violation in violations:
+        print(f"  ! {violation}")
+    return 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="oxvara",
@@ -123,6 +136,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="OpenAPI file, Apigee bundle dir, or APIM export dir",
     )
     diff_p.set_defaults(func=cmd_diff)
+
+    validate_p = sub.add_parser(
+        "validate",
+        help="check an estate against a policy pack",
+    )
+    validate_p.add_argument(
+        "input",
+        help="OpenAPI file, Apigee bundle dir, or APIM export dir",
+    )
+    validate_p.add_argument(
+        "--pack", default="strict",
+        help="policy pack to apply (default: strict)",
+    )
+    validate_p.set_defaults(func=cmd_validate)
     return parser
 
 

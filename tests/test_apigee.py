@@ -42,7 +42,7 @@ def test_flow_quota_overrides_global_spike_arrest():
     for op_id in ("create_pet", "get_pet"):
         spike = by_id[op_id].policy.rate_limit
         assert spike is not None
-        assert (spike.requests, spike.per) == (30, "second")
+        assert (spike.requests, spike.per) == (10, "second")
 
 
 def test_path_template_parameters_are_extracted():
@@ -87,14 +87,14 @@ def test_spike_arrest_rate_forms():
 
     from oxvara.exporters.apigee import _parse_spike_arrest
 
-    per_second = ET.fromstring(
-        '<SpikeArrest name="s"><Rate>30ps</Rate></SpikeArrest>'
+    ten_per_second = ET.fromstring(
+        '<SpikeArrest name="s"><Rate>10ps</Rate></SpikeArrest>'
     )
     per_minute = ET.fromstring(
         '<SpikeArrest name="s"><Rate>100pm</Rate></SpikeArrest>'
     )
-    assert (_parse_spike_arrest(per_second).requests,
-            _parse_spike_arrest(per_second).per) == (30, "second")
+    assert (_parse_spike_arrest(ten_per_second).requests,
+            _parse_spike_arrest(ten_per_second).per) == (10, "second")
     assert (_parse_spike_arrest(per_minute).requests,
             _parse_spike_arrest(per_minute).per) == (100, "minute")
     bad = ET.fromstring('<SpikeArrest name="s"><Rate>fast</Rate></SpikeArrest>')
