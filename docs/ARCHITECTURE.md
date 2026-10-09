@@ -1,8 +1,11 @@
 # Avouch architecture
 
-Avouch is a compiler. It takes the API estate you already govern and
-emits MCP servers your agents can call, with the governance carried
-over instead of re-entered.
+Avouch is the vendor-neutral control plane for agentic access to your
+API estate. Apigee and Azure APIM now expose their own APIs as MCP
+servers, but no enterprise runs one gateway, and no vendor will govern
+the others. Avouch reads the estate wherever it lives, normalizes every
+gateway's policies into one model, and emits MCP servers your agents
+can call, with the governance carried over instead of re-entered.
 
 ## The pipeline
 
@@ -118,3 +121,8 @@ client-credentials grant. Authorization-code and RFC 8693 token exchange
 4. Kong exporter: the third major gateway.
 5. Shared rate budget store (Redis) for multi-replica deployments.
 6. Response validation against the OpenAPI response schemas.
+7. One agent identity across gateways, with delegated OAuth2 (RFC 8693
+   token exchange) so agents act with scoped authority.
+8. Unified audit log across the whole estate, one trail per agent.
+9. Drift detection: flag when a gateway's policy config moves under a
+   compiled server.

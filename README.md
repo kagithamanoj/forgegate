@@ -1,17 +1,41 @@
 # Avouch
 
-**Your APIs are agent-ready. Your agents just don't know it.**
+**One governed front door for every agent, across every gateway you run.**
 
-Every enterprise already has thousands of REST APIs behind a gateway,
-with specs, keys, and rate limits. Agents speak MCP, not REST. Converting
-even one critical API into a governed MCP server takes an engineer days.
-Doing it for a whole estate takes quarters.
+Apigee and Azure APIM now turn their own APIs into MCP servers. But no
+enterprise runs one gateway. You run Apigee here, APIM there, Kong at
+the edge, MuleSoft on the legacy estate. No vendor will ever govern
+the others.
 
-Avouch reads the API estate you already have and compiles governed
-MCP servers from it. Auth schemes, rate limits, and timeouts are
-inherited from the estate's own policies instead of being re-configured
-for the agent world. It is the onboarding plane for MCP, not another
-gateway.
+Avouch is the vendor-neutral control plane for agentic access. It reads
+the API estate you already have, wherever it lives, and compiles
+governed MCP servers from it: one onboarding path, one policy model,
+one agent identity, one audit log. Auth schemes, rate limits, and
+timeouts are inherited from each gateway's own policies instead of
+being re-configured for the agent world, and Avouch adds the pieces no
+vendor ships: delegated OAuth2, drift detection, strict policy packs.
+
+## Why not just use your vendor's MCP export?
+
+Fair question, and asked first by everyone technical. Apigee and Azure
+APIM both ship native "APIs to MCP" now. If your whole estate lives
+behind one of them, use it. Avouch exists for the estates that don't:
+
+- **Cross-vendor estates.** Most large shops run two to four gateways.
+  Apigee's MCP export knows nothing about your APIM APIs, and vice
+  versa. Avouch normalizes all of them into one policy model and one
+  tool surface.
+- **One agent identity.** A vendor authenticates the agent to its own
+  gateway. Avouch gives the agent one identity across gateways, with
+  delegated OAuth2 so agents act with scoped authority instead of
+  borrowed keys.
+- **One audit log.** Every tool call, every gateway, one JSON-lines
+  trail. Auditors don't care which gateway served the call.
+- **Drift detection.** When a gateway's policy config moves under you,
+  Avouch flags what changed before your agents find out the hard way.
+
+What Avouch does not do: replace your gateways, or re-implement what
+they already do well. It reads them.
 
 ## Quickstart
 
