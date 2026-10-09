@@ -1,4 +1,4 @@
-"""Oxvara command line interface."""
+"""Avouch command line interface."""
 
 from __future__ import annotations
 
@@ -58,8 +58,8 @@ def _warnings(estate: ApiEstate) -> list[str]:
             warnings.append(f"{label} has no auth configured")
         if ep.policy.auth.kind == "oauth2":
             warnings.append(
-                f"{label} uses oauth2; set OXVARA_OAUTH_ACCESS_TOKEN or the "
-                "OXVARA_OAUTH_TOKEN_URL/CLIENT_ID/CLIENT_SECRET variables "
+                f"{label} uses oauth2; set AVOUCH_OAUTH_ACCESS_TOKEN or the "
+                "AVOUCH_OAUTH_TOKEN_URL/CLIENT_ID/CLIENT_SECRET variables "
                 "before running the generated server"
             )
         if ep.policy.rate_limit is None:
@@ -100,7 +100,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="oxvara",
+        prog="avouch",
         description="Compile governed MCP servers from a managed API estate.",
     )
     parser.add_argument("--version", action="version", version=__version__)
@@ -114,8 +114,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="OpenAPI file, Apigee bundle dir, or APIM export dir",
     )
     compile_p.add_argument(
-        "-o", "--output", default="oxvara_server.py",
-        help="where to write the generated server (default: oxvara_server.py)",
+        "-o", "--output", default="avouch_server.py",
+        help="where to write the generated server (default: avouch_server.py)",
     )
     compile_p.set_defaults(func=cmd_compile)
 
@@ -159,7 +159,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         return args.func(args)
     except (ValueError, TypeError, OSError) as exc:
-        print(f"oxvara: error: {exc}", file=sys.stderr)
+        print(f"avouch: error: {exc}", file=sys.stderr)
         return 1
 
 

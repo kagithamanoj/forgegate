@@ -1,10 +1,10 @@
-"""Tests for the OpenAPI parser and x-oxvara policy inheritance."""
+"""Tests for the OpenAPI parser and x-avouch policy inheritance."""
 
 import os
 
 import pytest
 
-from oxvara.parser import load_spec_file, parse_spec
+from avouch.parser import load_spec_file, parse_spec
 
 EXAMPLE = os.path.join(
     os.path.dirname(__file__), "..", "examples", "petstore.yaml"
@@ -82,7 +82,7 @@ def test_empty_spec_is_rejected():
 
 
 def test_parse_auth_accepts_basic_kind():
-    from oxvara.parser import _parse_auth
+    from avouch.parser import _parse_auth
 
     auth = _parse_auth({"kind": "basic"})
     assert auth.kind == "basic"

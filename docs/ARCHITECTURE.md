@@ -1,13 +1,13 @@
-# Oxvara architecture
+# Avouch architecture
 
-Oxvara is a compiler. It takes the API estate you already govern and
+Avouch is a compiler. It takes the API estate you already govern and
 emits MCP servers your agents can call, with the governance carried
 over instead of re-entered.
 
 ## The pipeline
 
 ```
-OpenAPI 3.x + x-oxvara annotations
+OpenAPI 3.x + x-avouch annotations
         |
         v
    +---------+      +----------------+
@@ -26,14 +26,14 @@ OpenAPI 3.x + x-oxvara annotations
               (FastMCP, stdio transport)
 ```
 
-### 1. Ingest (`oxvara/parser.py`)
+### 1. Ingest (`avouch/parser.py`)
 
 Reads an OpenAPI 3.x document (YAML or JSON) and walks every path and
 operation. It records the HTTP method, path template, parameters,
-request body shape, and the raw `x-oxvara` extension blocks. Anything
+request body shape, and the raw `x-avouch` extension blocks. Anything
 outside OpenAPI 3.x is rejected with a clear error.
 
-### 2. Normalize (`oxvara/models.py`)
+### 2. Normalize (`avouch/models.py`)
 
 The parser output is converted into a small internal model: `ApiEstate`,
 `Endpoint`, `Parameter`, `BodyProperty`, and `Policy`. The code generator
@@ -43,13 +43,13 @@ generator.
 
 ### 3. Policy inheritance
 
-This is the core idea. A root-level `x-oxvara` block declares the
+This is the core idea. A root-level `x-avouch` block declares the
 estate defaults: base URL, auth scheme, rate limit, timeout. An operation
-may carry its own `x-oxvara` block that overrides individual fields.
+may carry its own `x-avouch` block that overrides individual fields.
 Anything not overridden is inherited.
 
 ```
-estate defaults (x-oxvara at root)
+estate defaults (x-avouch at root)
   auth: apiKey / X-API-Key
   rateLimit: 100/minute
   timeout: 30s
@@ -63,7 +63,7 @@ The merge rule is simple and explicit: an operation-level value wins
 when present, otherwise the estate default applies. `Policy.merge()`
 implements this, and the parser tests pin the behavior.
 
-### 4. Generate (`oxvara/codegen.py`)
+### 4. Generate (`avouch/codegen.py`)
 
 For each endpoint the generator emits one MCP tool function:
 
@@ -72,18 +72,18 @@ For each endpoint the generator emits one MCP tool function:
 - The docstring carries the operation summary plus the inherited policy,
   so the agent sees the governance in the tool description.
 - The body injects auth credentials from environment variables
-  (`OXVARA_API_KEY`, `OXVARA_BEARER_TOKEN`), substitutes path
+  (`AVOUCH_API_KEY`, `AVOUCH_BEARER_TOKEN`), substitutes path
   parameters into the URL, and enforces the inherited rate limit with a
   client-side token bucket before any request leaves the process.
 
-The emitted module header records the Oxvara version and the source
+The emitted module header records the Avouch version and the source
 spec, so a generated server is always traceable back to what produced
 it. Generated files are meant to be regenerated, not hand-edited.
 
 ## Annotation reference
 
 ```yaml
-x-oxvara:
+x-avouch:
   baseUrl: https://api.example.com/v1   # fallback: servers[0].url
   auth:
     kind: apiKey      # apiKey | bearer | oauth2 | none
@@ -102,7 +102,7 @@ client-credentials grant. Authorization-code and RFC 8693 token exchange
 ## What this prototype does not do yet
 
 - No Kong exporter yet. Apigee and Azure APIM exporters are built and
-  tested (see `oxvara/exporters/`).
+  tested (see `avouch/exporters/`).
 - No response schema validation and no retry logic in generated servers.
 - The rate limiter is per-process and in-memory. A shared budget store
   is on the roadmap.
@@ -114,7 +114,7 @@ client-credentials grant. Authorization-code and RFC 8693 token exchange
 1. ~~Apigee X and Azure APIM exporters~~ Done.
 2. ~~Policy packs~~ Done (`strict` ships; more packs to come, for
    example per-team budgets and data-classification rules).
-3. ~~Dry-run and diff mode~~ Done (`oxvara diff`, `oxvara validate`).
+3. ~~Dry-run and diff mode~~ Done (`avouch diff`, `avouch validate`).
 4. Kong exporter: the third major gateway.
 5. Shared rate budget store (Redis) for multi-replica deployments.
 6. Response validation against the OpenAPI response schemas.

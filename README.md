@@ -1,4 +1,4 @@
-# Oxvara
+# Avouch
 
 **Your APIs are agent-ready. Your agents just don't know it.**
 
@@ -7,7 +7,7 @@ with specs, keys, and rate limits. Agents speak MCP, not REST. Converting
 even one critical API into a governed MCP server takes an engineer days.
 Doing it for a whole estate takes quarters.
 
-Oxvara reads the API estate you already have and compiles governed
+Avouch reads the API estate you already have and compiles governed
 MCP servers from it. Auth schemes, rate limits, and timeouts are
 inherited from the estate's own policies instead of being re-configured
 for the agent world. It is the onboarding plane for MCP, not another
@@ -16,24 +16,24 @@ gateway.
 ## Quickstart
 
 ```bash
-pip install "oxvara @ git+https://github.com/kagithamanoj/oxvara.git"
+pip install "avouch @ git+https://github.com/kagithamanoj/avouch.git"
 
 # point it at an OpenAPI file, an Apigee bundle, or an APIM export
-oxvara inspect examples/petstore.yaml
-oxvara inspect examples/apigee
-oxvara inspect examples/apim
+avouch inspect examples/petstore.yaml
+avouch inspect examples/apigee
+avouch inspect examples/apim
 
 # dry run: see the planned tools and inherited policies first
-oxvara diff examples/apigee
+avouch diff examples/apigee
 
 # check the estate against the strict policy pack
-oxvara validate examples/apigee
+avouch validate examples/apigee
 
 # compile it into a runnable MCP server
-oxvara compile examples/apigee -o petserver.py
+avouch compile examples/apigee -o petserver.py
 
 # give the generated server its credentials, then run it
-export OXVARA_API_KEY=your-key
+export AVOUCH_API_KEY=your-key
 python petserver.py
 ```
 
@@ -44,7 +44,7 @@ it (for example Claude Code or any host that accepts an MCP command).
 
 ```mermaid
 flowchart LR
-    A[OpenAPI 3.x\n+ x-oxvara policies] --> D[Policy merge]
+    A[OpenAPI 3.x\n+ x-avouch policies] --> D[Policy merge]
     B[Apigee bundle\nproxies + policies] --> D
     C[APIM export\nopenapi + policy.xml] --> D
     D[Policy merge\nestate defaults +\nper-operation overrides] --> E[Code generator]
@@ -52,10 +52,10 @@ flowchart LR
     F --> G[Agents call tools;\nauth + rate limits\nalready enforced]
 ```
 
-1. Oxvara imports your estate from one of three sources (below) and
+1. Avouch imports your estate from one of three sources (below) and
    normalizes it into one internal model: operations plus the policy
    each one inherits.
-2. `oxvara compile` turns every operation into an MCP tool. The
+2. `avouch compile` turns every operation into an MCP tool. The
    generated code injects credentials from the environment, substitutes
    path parameters, and enforces rate limits client-side before a
    request ever leaves the process.
@@ -64,11 +64,11 @@ flowchart LR
 
 ## Input sources
 
-**OpenAPI 3.x.** Governance comes from `x-oxvara` blocks. A block at
+**OpenAPI 3.x.** Governance comes from `x-avouch` blocks. A block at
 the document root sets the estate defaults; a block on an operation
 overrides them. See `examples/petstore.yaml`.
 
-**Apigee.** Point Oxvara at an exported bundle directory
+**Apigee.** Point Avouch at an exported bundle directory
 (`apiproxy/` with `proxies/`, `targets/`, `policies/`). Operations come
 from proxy flow conditions (`proxy.pathsuffix MatchesPath ... and
 request.verb = ...`). PreFlow policies apply to every operation;
@@ -77,14 +77,14 @@ Quota and SpikeArrest map to rate limits. A Quota that only carries a
 `countRef` (a per-product quota the bundle cannot resolve) contributes
 no limit rather than a wrong one. See `examples/apigee/`.
 
-**Azure APIM.** Point Oxvara at an export directory with
+**Azure APIM.** Point Avouch at an export directory with
 `openapi.yaml`, `policy.xml`, and optional
 `operations/<operationId>/policy.xml` overrides. Only `<inbound>`
 policies are read: `rate-limit` and `quota` (tightest wins),
 `check-header` for subscription keys, `authentication-basic`, and
 `validate-jwt`. See `examples/apim/`.
 
-## Annotation reference (`x-oxvara`)
+## Annotation reference (`x-avouch`)
 
 | Key | Where | Meaning |
 | --- | --- | --- |
@@ -100,23 +100,23 @@ Auth kinds and their credential sources in generated servers:
 
 | Kind | Env var | Sent as |
 | ---- | ------- | ------- |
-| `apiKey` | `OXVARA_API_KEY` | Header (or query param) named by `auth.name` |
-| `bearer` | `OXVARA_BEARER_TOKEN` | `Authorization: Bearer <token>` |
-| `basic` | `OXVARA_BASIC_CREDENTIALS` | `Authorization: Basic <base64(user:password)>` |
-| `oauth2` | `OXVARA_OAUTH_ACCESS_TOKEN` (delegated token), or `OXVARA_OAUTH_TOKEN_URL` + `_CLIENT_ID` + `_CLIENT_SECRET` [+ `_SCOPE`] | `Authorization: Bearer <token>`; client-credentials tokens are cached until expiry |
+| `apiKey` | `AVOUCH_API_KEY` | Header (or query param) named by `auth.name` |
+| `bearer` | `AVOUCH_BEARER_TOKEN` | `Authorization: Bearer <token>` |
+| `basic` | `AVOUCH_BASIC_CREDENTIALS` | `Authorization: Basic <base64(user:password)>` |
+| `oauth2` | `AVOUCH_OAUTH_ACCESS_TOKEN` (delegated token), or `AVOUCH_OAUTH_TOKEN_URL` + `_CLIENT_ID` + `_CLIENT_SECRET` [+ `_SCOPE`] | `Authorization: Bearer <token>`; client-credentials tokens are cached until expiry |
 | `none` | n/a | No credentials |
 
 ## Commands
 
 | Command | What it does |
 | ------- | ------------ |
-| `oxvara inspect <input>` | List operations and their inherited policies |
-| `oxvara diff <input>` | Dry run: planned tools, policies, and governance warnings. Writes nothing |
-| `oxvara validate [--pack strict] <input>` | Check the estate against a policy pack; exits non-zero on violations |
-| `oxvara compile <input> -o server.py` | Generate the MCP server module |
+| `avouch inspect <input>` | List operations and their inherited policies |
+| `avouch diff <input>` | Dry run: planned tools, policies, and governance warnings. Writes nothing |
+| `avouch validate [--pack strict] <input>` | Check the estate against a policy pack; exits non-zero on violations |
+| `avouch compile <input> -o server.py` | Generate the MCP server module |
 
 `<input>` is an OpenAPI file, an Apigee bundle directory, or an APIM
-export directory; Oxvara detects which by layout.
+export directory; Avouch detects which by layout.
 
 ## Policy packs
 
@@ -127,7 +127,7 @@ requests/minute. Run it in CI to keep new APIs from shipping
 ungoverned:
 
 ```bash
-oxvara validate --pack strict ./my-apim-export
+avouch validate --pack strict ./my-apim-export
 ```
 
 ## Project status
@@ -148,12 +148,12 @@ Anything else marked "not implemented" in the docs is exactly that.
 ## Security model of generated servers
 
 - **Audit log**: every call and response status is written as JSON lines
-  to `OXVARA_AUDIT_LOG` (default stderr). Argument values under
+  to `AVOUCH_AUDIT_LOG` (default stderr). Argument values under
   secret-looking keys are redacted; credentials are never logged.
 - **Argument injection**: path parameters are percent-encoded, so a value
   like `../admin` cannot add path segments.
 - **Untrusted output**: upstream responses are size-capped
-  (`OXVARA_MAX_RESPONSE_CHARS`) and labeled as untrusted data. This
+  (`AVOUCH_MAX_RESPONSE_CHARS`) and labeled as untrusted data. This
   reduces, but does not eliminate, prompt-injection risk from hostile
   API responses.
 
@@ -163,7 +163,7 @@ Anything else marked "not implemented" in the docs is exactly that.
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 pytest        # full suite
-ruff check oxvara tests   # lint, also runs in CI
+ruff check avouch tests   # lint, also runs in CI
 ```
 
 ## Contributing

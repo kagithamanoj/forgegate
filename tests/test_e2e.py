@@ -11,8 +11,8 @@ import os
 
 import pytest
 
-from oxvara.codegen import write_server
-from oxvara.parser import load_spec_file
+from avouch.codegen import write_server
+from avouch.parser import load_spec_file
 
 EXAMPLE = os.path.join(
     os.path.dirname(__file__), "..", "examples", "petstore.yaml"
@@ -39,7 +39,7 @@ def server_module(tmp_path, monkeypatch):
     import requests
 
     monkeypatch.setattr(requests, "request", fake_request)
-    monkeypatch.setenv("OXVARA_API_KEY", "test-key-123")
+    monkeypatch.setenv("AVOUCH_API_KEY", "test-key-123")
 
     estate = load_spec_file(EXAMPLE)
     out = str(tmp_path / "petserver.py")
@@ -109,14 +109,14 @@ def test_response_is_labeled_untrusted_and_capped(server_module, monkeypatch):
     big = "x" * 50000
     monkeypatch.setattr(requests, "request", lambda *a, **k: FakeResponse(big))
     out = server_module.petstore_list_pets()
-    assert out.startswith("[oxvara: untrusted API response")
+    assert out.startswith("[avouch: untrusted API response")
     assert "response truncated" in out
     assert len(out) < 21000
 
 
 def test_audit_log_redacts_secrets(server_module, tmp_path, monkeypatch):
     log = tmp_path / "audit.jsonl"
-    monkeypatch.setenv("OXVARA_AUDIT_LOG", str(log))
+    monkeypatch.setenv("AVOUCH_AUDIT_LOG", str(log))
     server_module._audit("call", "t", args=server_module._redact({"api_key": "s3", "q": "ok"}))
     text = log.read_text()
     assert "s3" not in text and '"q": "ok"' in text
@@ -139,9 +139,9 @@ def test_oauth2_client_credentials_cached(server_module, monkeypatch):
         return Tok()
 
     monkeypatch.setattr(requests, "post", fake_post)
-    monkeypatch.setenv("OXVARA_OAUTH_TOKEN_URL", "https://idp.test/token")
-    monkeypatch.setenv("OXVARA_OAUTH_CLIENT_ID", "id")
-    monkeypatch.setenv("OXVARA_OAUTH_CLIENT_SECRET", "sec")
+    monkeypatch.setenv("AVOUCH_OAUTH_TOKEN_URL", "https://idp.test/token")
+    monkeypatch.setenv("AVOUCH_OAUTH_CLIENT_ID", "id")
+    monkeypatch.setenv("AVOUCH_OAUTH_CLIENT_SECRET", "sec")
     assert server_module._auth_headers("oauth2", "", "") == {"Authorization": "Bearer tok-1"}
     server_module._auth_headers("oauth2", "", "")
     assert len(posts) == 1
@@ -149,13 +149,13 @@ def test_oauth2_client_credentials_cached(server_module, monkeypatch):
 
 
 def test_oauth2_delegated_token_wins(server_module, monkeypatch):
-    monkeypatch.setenv("OXVARA_OAUTH_ACCESS_TOKEN", "user-tok")
+    monkeypatch.setenv("AVOUCH_OAUTH_ACCESS_TOKEN", "user-tok")
     assert server_module._auth_headers("oauth2", "", "") == {"Authorization": "Bearer user-tok"}
 
 
 def test_oauth2_unconfigured_fails_loudly(server_module, monkeypatch):
     for v in ("ACCESS_TOKEN", "TOKEN_URL", "CLIENT_ID", "CLIENT_SECRET"):
-        monkeypatch.delenv("OXVARA_OAUTH_" + v, raising=False)
+        monkeypatch.delenv("AVOUCH_OAUTH_" + v, raising=False)
     server_module._oauth_cache["token"] = ""
-    with pytest.raises(server_module.OxvaraError):
+    with pytest.raises(server_module.AvouchError):
         server_module._auth_headers("oauth2", "", "")

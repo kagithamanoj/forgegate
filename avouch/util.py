@@ -1,4 +1,4 @@
-"""Small shared helpers for the Oxvara compiler."""
+"""Small shared helpers for the Avouch compiler."""
 
 from __future__ import annotations
 

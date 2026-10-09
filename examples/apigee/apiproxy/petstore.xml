@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <APIProxy revision="3" name="petstore">
-    <Description>Petstore API proxy, bundled as a Oxvara example</Description>
+    <Description>Petstore API proxy, bundled as a Avouch example</Description>
     <Policies>
         <Policy>Verify-API-Key</Policy>
         <Policy>Spike-Arrest</Policy>

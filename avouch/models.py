@@ -1,6 +1,6 @@
 """Internal model for a normalized API estate.
 
-The parser turns an OpenAPI document plus x-oxvara policy annotations
+The parser turns an OpenAPI document plus x-avouch policy annotations
 into these objects. The code generator only ever sees these, which keeps
 the compiler decoupled from any one spec format or API management vendor.
 """

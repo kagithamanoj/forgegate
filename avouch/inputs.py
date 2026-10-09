@@ -1,8 +1,8 @@
 """Detect and load any supported estate input.
 
-Oxvara accepts three kinds of input:
+Avouch accepts three kinds of input:
 
-- an OpenAPI 3.x YAML or JSON file (governance from x-oxvara blocks),
+- an OpenAPI 3.x YAML or JSON file (governance from x-avouch blocks),
 - an Apigee bundle directory (apiproxy/ layout),
 - an Azure APIM export directory (openapi.yaml + policy.xml layout).
 

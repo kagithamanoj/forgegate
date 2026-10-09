@@ -2,8 +2,8 @@
 
 import os
 
-from oxvara.cli import build_parser
-from oxvara.inputs import detect_source, load_input
+from avouch.cli import build_parser
+from avouch.inputs import detect_source, load_input
 
 EXAMPLES = os.path.join(os.path.dirname(__file__), "..", "examples")
 
@@ -70,7 +70,7 @@ def test_diff_flags_oauth2_as_unimplemented(capsys, tmp_path):
     spec.write_text(
         "openapi: 3.0.0\n"
         "info: {title: OAuthed, version: '1'}\n"
-        "x-oxvara:\n"
+        "x-avouch:\n"
         "  baseUrl: https://api.example.com\n"
         "  auth: {kind: oauth2}\n"
         "paths:\n"
@@ -84,4 +84,4 @@ def test_diff_flags_oauth2_as_unimplemented(capsys, tmp_path):
     assert args.func(args) == 0
     out = capsys.readouterr().out
     assert "oauth2" in out
-    assert "OXVARA_OAUTH_TOKEN_URL" in out
+    assert "AVOUCH_OAUTH_TOKEN_URL" in out

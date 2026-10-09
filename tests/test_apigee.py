@@ -4,7 +4,7 @@ import os
 
 import pytest
 
-from oxvara.exporters.apigee import load_bundle
+from avouch.exporters.apigee import load_bundle
 
 BUNDLE = os.path.join(
     os.path.dirname(__file__), "..", "examples", "apigee"
@@ -73,7 +73,7 @@ def test_non_bundle_directory_raises(tmp_path):
 def test_quota_with_only_count_ref_contributes_no_limit(tmp_path):
     import xml.etree.ElementTree as ET
 
-    from oxvara.exporters.apigee import _parse_quota
+    from avouch.exporters.apigee import _parse_quota
 
     policy = ET.fromstring(
         '<Quota name="q"><Allow countRef="verifyapikey.key.quota"/>'
@@ -85,7 +85,7 @@ def test_quota_with_only_count_ref_contributes_no_limit(tmp_path):
 def test_spike_arrest_rate_forms():
     import xml.etree.ElementTree as ET
 
-    from oxvara.exporters.apigee import _parse_spike_arrest
+    from avouch.exporters.apigee import _parse_spike_arrest
 
     ten_per_second = ET.fromstring(
         '<SpikeArrest name="s"><Rate>10ps</Rate></SpikeArrest>'

@@ -5,7 +5,7 @@ import textwrap
 
 import pytest
 
-from oxvara.exporters.apim import _inbound_policy, load_apim
+from avouch.exporters.apim import _inbound_policy, load_apim
 
 APIM = os.path.join(
     os.path.dirname(__file__), "..", "examples", "apim"

@@ -1,13 +1,13 @@
 """Parse an OpenAPI 3.x document into a normalized ApiEstate.
 
-Governance is read from `x-oxvara` extension blocks. A block at the
+Governance is read from `x-avouch` extension blocks. A block at the
 document root sets the defaults for the whole estate; a block on an
 operation overrides the defaults for that operation only. Operations
 without an explicit block simply inherit.
 
 Example:
 
-    x-oxvara:
+    x-avouch:
       baseUrl: https://api.example.com/v1
       auth:
         kind: apiKey
@@ -52,7 +52,7 @@ def _parse_auth(raw: dict | None) -> AuthPolicy:
         return AuthPolicy(kind="none")
     kind = str(raw.get("kind", "none")).lower()
     if kind not in ("apikey", "bearer", "basic", "oauth2", "none"):
-        raise ValueError(f"unsupported x-oxvara auth kind: {kind!r}")
+        raise ValueError(f"unsupported x-avouch auth kind: {kind!r}")
     kind = "apiKey" if kind == "apikey" else kind
     return AuthPolicy(
         kind=kind,
@@ -86,11 +86,11 @@ def parse_spec(text: str) -> ApiEstate:
     openapi = str(doc.get("openapi", ""))
     if not openapi.startswith("3."):
         raise ValueError(
-            f"oxvara currently supports OpenAPI 3.x, got {openapi!r}"
+            f"avouch currently supports OpenAPI 3.x, got {openapi!r}"
         )
 
-    default_policy = _parse_policy(doc.get("x-oxvara"))
-    base_url = str((doc.get("x-oxvara") or {}).get("baseUrl", ""))
+    default_policy = _parse_policy(doc.get("x-avouch"))
+    base_url = str((doc.get("x-avouch") or {}).get("baseUrl", ""))
     if not base_url:
         base_url = _servers_base_url(doc)
     return parse_document(doc, default_policy, base_url)
@@ -155,7 +155,7 @@ def _parse_operation(
         or f"{method}_{path}".replace("/", "_").strip("_")
     )
     tool_name = f"{slug}_{camel_to_snake(operation_id)}"
-    policy = default_policy.merge(_parse_policy(operation.get("x-oxvara")))
+    policy = default_policy.merge(_parse_policy(operation.get("x-avouch")))
 
     parameters: list[Parameter] = []
     for raw in list(shared_params) + list(operation.get("parameters", []) or []):
