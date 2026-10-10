@@ -79,10 +79,53 @@ def test_run_pack_rejects_unknown_pack():
 
 def test_validate_command_passes_on_apigee_example(capsys):
     args = build_parser().parse_args(
-        ["validate", os.path.join(EXAMPLES, "apigee")]
+        ["validate", os.path.join(EXAMPLES, "apigee") + "@https://apigee.example.com"]
     )
     assert args.func(args) == 0
     assert "no violations" in capsys.readouterr().out
+
+
+def test_validate_fails_apigee_without_gateway_url(capsys):
+    args = build_parser().parse_args(["validate", os.path.join(EXAMPLES, "apigee")])
+    assert args.func(args) == 1
+    assert "base-url" in capsys.readouterr().out
+
+
+def test_owasp_pack_rules():
+    from oxvara.packs import owasp_mcp_pack
+
+    estate = _estate()
+    estate.base_url = "http://backend.internal"
+    estate.upstream_url = "http://backend.internal"
+    estate.endpoints[0].policy.auth = AuthPolicy(kind="apiKey", name="k", location="query")
+    estate.endpoints.append(Endpoint(
+        operation_id="wipe", tool_name="t_wipe", method="DELETE", path="/all",
+        summary="", description="", policy=Policy(auth=AuthPolicy(kind="basic")),
+    ))
+    estate.endpoints.append(Endpoint(
+        operation_id="open", tool_name="t_open", method="POST", path="/x",
+        summary="", description="",
+    ))
+    rules = {v.rule for v in owasp_mcp_pack(estate)}
+    assert rules == {
+        "MCP01-no-query-credentials",
+        "MCP01-require-tls",
+        "MCP02-scoped-auth-on-destructive",
+        "MCP07-auth-on-writes",
+        "MCP07-gateway-bypass",
+    }
+
+
+def test_validate_runs_several_packs_with_sarif(capsys):
+    import json
+
+    kong = os.path.join(EXAMPLES, "kong", "kong.yaml") + "@https://kong.example.com"
+    args = build_parser().parse_args(
+        ["validate", kong, "--pack", "strict", "--pack", "owasp-mcp", "--format", "sarif"]
+    )
+    assert args.func(args) == 0
+    sarif = json.loads(capsys.readouterr().out)
+    assert sarif["runs"][0]["results"] == []
 
 
 def test_validate_command_fails_on_bare_spec(capsys, tmp_path):

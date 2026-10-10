@@ -1,3 +1,3 @@
-"""Oxvara: compile governed MCP servers from an existing managed API estate."""
+"""Oxvara: vendor-neutral governance for agent access to an existing API estate."""
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"

@@ -7,14 +7,27 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
       - name: Install
         run: pip install -e ".[dev]"
       - name: Lint
         run: ruff check oxvara tests
       - name: Test
         run: pytest -q
+      - name: Govern the bundled examples (dogfood)
+        run: |
+          oxvara validate --pack strict --pack owasp-mcp \
+            "examples/apigee@https://apigee.example.com" \
+            examples/apim \
+            "examples/kong/kong.yaml@https://kong.example.com"
+          oxvara inventory \
+            "examples/apigee@https://apigee.example.com" \
+            examples/apim \
+            "examples/kong/kong.yaml@https://kong.example.com"

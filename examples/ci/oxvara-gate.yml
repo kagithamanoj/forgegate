@@ -1,0 +1,53 @@
+# Example GitHub Actions workflow for a repo that holds gateway config.
+# Copy to .github/workflows/oxvara-gate.yml and adjust the inputs.
+#
+# On every change to gateway config it:
+#   1. validates the estate against the strict and owasp-mcp packs, and
+#   2. fails if the agent-facing tool surface drifted from the reviewed
+#      lockfile (auth weakened, rate limit loosened, description changed).
+# Findings are uploaded as code scanning alerts.
+name: Oxvara gate
+
+on:
+  pull_request:
+    paths: ["apigee/**", "apim/**", "kong/**", "oxvara.lock.json"]
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    env:
+      INPUTS: >-
+        apigee/orders@https://api.example.com
+        apim/payments
+        kong/kong.yaml@https://edge.example.com
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install "oxvara @ git+https://github.com/kagithamanoj/oxvara.git"
+      - name: Validate
+        id: validate
+        continue-on-error: true
+        run: oxvara validate --pack strict --pack owasp-mcp --format sarif $INPUTS > validate.sarif
+      - name: Drift
+        id: drift
+        continue-on-error: true
+        run: oxvara drift --lock oxvara.lock.json --format sarif $INPUTS > drift.sarif
+      - name: Upload validate findings
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: validate.sarif
+          category: oxvara-validate
+      - name: Upload drift findings
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: drift.sarif
+          category: oxvara-drift
+      - name: Fail on findings
+        if: steps.validate.outcome == 'failure' || steps.drift.outcome == 'failure'
+        run: exit 1
