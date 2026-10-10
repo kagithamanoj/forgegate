@@ -1,0 +1,23 @@
+{
+  "items": [
+    {
+      "id": "u1x2y3",
+      "name": "partner-agents",
+      "apiStages": [
+        {
+          "apiId": "a1b2c3d4e5",
+          "stage": "prod",
+          "throttle": { "/orders/GET": { "burstLimit": 4, "rateLimit": 2.0 } }
+        }
+      ],
+      "throttle": { "burstLimit": 20, "rateLimit": 10.0 },
+      "quota": { "limit": 1000000, "offset": 0, "period": "DAY" }
+    },
+    {
+      "id": "z9y8x7",
+      "name": "billing-internal",
+      "apiStages": [{ "apiId": "zzzzzzzzzz", "stage": "prod" }],
+      "throttle": { "burstLimit": 5000, "rateLimit": 1000.0 }
+    }
+  ]
+}

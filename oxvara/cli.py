@@ -17,7 +17,8 @@ from .packs import PACKS, run_packs
 from .report import as_json, sarif
 
 INPUT_HELP = (
-    "OpenAPI file, Apigee bundle dir, APIM export dir, or Kong decK file; "
+    "OpenAPI file, Apigee bundle dir, APIM export dir, AWS API Gateway export dir, "
+    "or Kong decK file; "
     "append @https://gateway.host to set the gateway it is served on"
 )
 
@@ -243,7 +244,8 @@ def build_parser() -> argparse.ArgumentParser:
         prog="oxvara",
         description=(
             "Vendor-neutral governance for agent access to your API "
-            "estate: inventory, validate, lock, detect drift, compile."
+            "estate (Apigee, Azure APIM, AWS API Gateway, Kong): inventory, "
+            "validate, lock, detect drift, compile."
         ),
     )
     parser.add_argument("--version", action="version", version=__version__)
