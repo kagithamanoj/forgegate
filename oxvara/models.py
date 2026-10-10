@@ -96,7 +96,8 @@ class ApiEstate:
     version: str
     base_url: str
     endpoints: list[Endpoint] = field(default_factory=list)
-    # Which importer produced this estate: openapi | apigee | apim | kong | merged
+    # Which importer produced this estate:
+    # openapi | apigee | apim | kong | aws | mulesoft | merged
     kind: str = "openapi"
     # The backend behind the gateway, when the export reveals it. Tools must
     # never call this directly: that would bypass every gateway policy.

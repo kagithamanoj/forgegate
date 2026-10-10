@@ -151,10 +151,13 @@ x-oxvara:
   server with its own OAuth protected-resource metadata is not built.
 - Kong `jwt` maps to a client-presented bearer token; Oxvara does not
   mint JWTs.
+- MuleSoft `ip-allowlist`/`ip-blacklist`, header and CORS policies are
+  reported, not modeled; a `client-id-enforcement` with several required
+  headers models the first and reports the rest.
 
 ## Roadmap
 
-1. API Gateway HTTP APIs (v2), MuleSoft importers; SigV4 for IAM methods.
+1. API Gateway HTTP APIs (v2) importer; SigV4 for IAM methods.
 2. Live import from gateway management APIs, including AWS Organizations
    multi-account collection.
 3. Remote MCP transport with RFC 9728 protected-resource metadata.

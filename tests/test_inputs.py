@@ -13,6 +13,7 @@ def test_detect_source():
     assert detect_source(os.path.join(EXAMPLES, "apim")) == "apim"
     assert detect_source(os.path.join(EXAMPLES, "petstore.yaml")) == "openapi"
     assert detect_source(os.path.join(EXAMPLES, "kong", "kong.yaml")) == "kong"
+    assert detect_source(os.path.join(EXAMPLES, "mulesoft", "orders-api")) == "mulesoft"
 
 
 def test_gateway_url_suffix_overrides_openapi_base():

@@ -2,8 +2,8 @@
 
 **Every gateway secures its own MCP. Nobody governs all of them.**
 
-Apigee, Azure APIM, Kong and AWS (Bedrock AgentCore Gateway) each turn
-APIs into MCP tools now.
+Apigee, Azure APIM, Kong, AWS (Bedrock AgentCore Gateway) and MuleSoft
+each turn APIs into MCP tools now.
 But about a third of organizations already run more than one API
 gateway ([Postman, 2025](https://www.postman.com/state-of-api/2025/)),
 and no vendor will govern the others.
@@ -13,7 +13,7 @@ API estate. It reads the gateway configuration you already have, from
 any of them, and gives you:
 
 - **One inventory** of every agent-facing tool across Amazon API Gateway,
-  Apigee, Azure APIM and Kong, and across accounts and stages.
+  Apigee, Azure APIM, Kong and MuleSoft, and across accounts and stages.
 - **One policy check**, including rules mapped to the OWASP MCP Top 10,
   with SARIF output for GitHub code scanning.
 - **A lockfile and a drift gate**: CI fails when someone weakens auth,
@@ -34,24 +34,26 @@ It does not replace your gateways or re-implement what they do. It reads them.
 pip install "oxvara @ git+https://github.com/kagithamanoj/oxvara.git"
 
 # Each input is an OpenAPI file, an AWS API Gateway export, an Apigee
-# bundle, an APIM export or a Kong decK file. Append @https://host for the gateway it is served on.
+# bundle, an APIM export, a Kong decK file or a MuleSoft Anypoint export.
+# Append @https://host for the gateway it is served on.
 APIGEE="examples/apigee@https://apigee.example.com"
 APIM="examples/apim"
 AWS="examples/aws/orders-api"
 KONG="examples/kong/kong.yaml@https://kong.example.com"
+MULESOFT="examples/mulesoft/orders-api@https://anypoint.example.com"
 
-# one table across all four gateways
-oxvara inventory $AWS $APIGEE $APIM $KONG
+# one table across all five gateways
+oxvara inventory $AWS $APIGEE $APIM $KONG $MULESOFT
 
 # policy check: strict + OWASP MCP rules (add --format sarif for code scanning)
-oxvara validate --pack strict --pack owasp-mcp $AWS $APIGEE $APIM $KONG
+oxvara validate --pack strict --pack owasp-mcp $AWS $APIGEE $APIM $KONG $MULESOFT
 
 # record the reviewed tool surface, then gate changes against it
-oxvara lock $AWS $APIGEE $APIM $KONG -o oxvara.lock.json
-oxvara drift --lock oxvara.lock.json $AWS $APIGEE $APIM $KONG
+oxvara lock $AWS $APIGEE $APIM $KONG $MULESOFT -o oxvara.lock.json
+oxvara drift --lock oxvara.lock.json $AWS $APIGEE $APIM $KONG $MULESOFT
 
 # optional: compile one MCP server that fronts all of them
-oxvara compile $AWS $APIGEE $APIM $KONG -o server.py
+oxvara compile $AWS $APIGEE $APIM $KONG $MULESOFT -o server.py
 ```
 
 A ready-to-copy GitHub Actions gate is in
@@ -136,6 +138,17 @@ operations; regex paths with named captures become path parameters.
 `rate-limiting`, `rate-limiting-advanced` and `request-termination` are
 read with Kong's precedence (route over service over global).
 
+**MuleSoft.** An Anypoint export directory: the API spec
+(`openapi.json`/`openapi.yaml` from Exchange) plus `policies.json`
+listing the applied API Manager policies as `{"type", "config"}`.
+`client-id-enforcement` maps to apiKey, `rate-limiting` to a rate
+limit, `jwt-validation` to bearer, `basic-authentication` to basic and
+`oauth2` to oauth2. Policies apply API-wide unless scoped with
+`methods`/`paths`; where several apply, the strongest auth and the
+tightest rate limit win. IP allowlists and anything unrecognized are
+reported as import notes, not guessed at. See
+`examples/mulesoft/orders-api/`.
+
 Whatever an importer cannot model faithfully (consumer-scoped plugins,
 `hmac-auth`, routes without methods) is reported as an import note, not
 guessed at.
@@ -207,15 +220,15 @@ cannot inject code into the server.
 
 ## Project status
 
-**Working now:** OpenAPI, Amazon API Gateway, Apigee, Azure APIM and Kong importers;
-multi-gateway merge; inventory; `strict` and `owasp-mcp` packs with
-SARIF; lockfile and drift gate; generated MCP servers with OAuth2
-(client credentials, RFC 8693 exchange), audit log, tool annotations
-and injection-safe codegen; CI on Python 3.10 to 3.13.
+**Working now:** OpenAPI, Amazon API Gateway, Apigee, Azure APIM, Kong and
+MuleSoft importers; multi-gateway merge; inventory; `strict` and
+`owasp-mcp` packs with SARIF; lockfile and drift gate; generated MCP
+servers with OAuth2 (client credentials, RFC 8693 exchange), audit log,
+tool annotations and injection-safe codegen; CI on Python 3.10 to 3.13.
 
-**Not built yet:** API Gateway HTTP APIs (v2) and MuleSoft importers;
-SigV4 signing for IAM-authorized methods; multi-account collection; live import
-from gateway management APIs; remote (HTTP) MCP transport with RFC 9728
+**Not built yet:** API Gateway HTTP APIs (v2) importer; SigV4 signing for
+IAM-authorized methods; multi-account collection; live import from
+gateway management APIs; remote (HTTP) MCP transport with RFC 9728
 metadata; per-consumer/per-product policy; a shared rate budget across
 replicas. See the roadmap in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
