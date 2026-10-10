@@ -1,0 +1,21 @@
+{
+  "deploymentId": "d3pl0y",
+  "stageName": "prod",
+  "restApiId": "a1b2c3d4e5",
+  "methodSettings": {
+    "*/*": {
+      "throttlingBurstLimit": 200,
+      "throttlingRateLimit": 100.0,
+      "metricsEnabled": true
+    },
+    "~1orders/POST": {
+      "throttlingBurstLimit": 10,
+      "throttlingRateLimit": 5.0
+    },
+    "~1orders~1{orderId}/DELETE": {
+      "throttlingBurstLimit": 1,
+      "throttlingRateLimit": 0.5
+    }
+  },
+  "tracingEnabled": false
+}

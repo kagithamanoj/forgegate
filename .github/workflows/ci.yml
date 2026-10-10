@@ -26,8 +26,10 @@ jobs:
           oxvara validate --pack strict --pack owasp-mcp \
             "examples/apigee@https://apigee.example.com" \
             examples/apim \
+            examples/aws/orders-api \
             "examples/kong/kong.yaml@https://kong.example.com"
           oxvara inventory \
             "examples/apigee@https://apigee.example.com" \
             examples/apim \
+            examples/aws/orders-api \
             "examples/kong/kong.yaml@https://kong.example.com"

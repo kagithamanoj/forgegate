@@ -5,7 +5,9 @@ Oxvara accepts four kinds of input:
 - an OpenAPI 3.x YAML or JSON file (governance from x-oxvara blocks),
 - an Apigee bundle directory (apiproxy/ layout),
 - an Azure APIM export directory (openapi.yaml + policy.xml layout),
-- a Kong decK state file (a YAML/JSON file with _format_version).
+- a Kong decK state file (a YAML/JSON file with _format_version),
+- an Amazon API Gateway export directory (openapi.json from get-export,
+  plus optional stage.json and usage-plans.json).
 
 Each input may carry the gateway URL it is served on, written as
 ``PATH@https://gateway.example.com``. Gateway exports (Apigee, Kong)
@@ -22,6 +24,7 @@ import os
 
 from .exporters.apigee import load_bundle
 from .exporters.apim import load_apim
+from .exporters.aws import is_aws_export, load_aws
 from .exporters.kong import is_deck_file, load_deck
 from .models import ApiEstate
 from .parser import load_spec_file
@@ -37,13 +40,15 @@ def split_input(spec: str) -> tuple[str, str]:
 
 
 def detect_source(path: str) -> str:
-    """Return 'apigee', 'apim', 'kong', or 'openapi' for a filesystem path."""
+    """Return 'apigee', 'aws', 'apim', 'kong', or 'openapi' for a path."""
     path, _ = split_input(path)
     if os.path.isdir(path):
         if os.path.isdir(os.path.join(path, "apiproxy")) or os.path.isdir(
             os.path.join(path, "proxies")
         ):
             return "apigee"
+        if is_aws_export(path):
+            return "aws"
         return "apim"
     if is_deck_file(path):
         return "kong"
@@ -57,6 +62,8 @@ def load_input(spec: str, gateway_url: str = "") -> ApiEstate:
     source = detect_source(path)
     if source == "apigee":
         estate = load_bundle(path, gateway)
+    elif source == "aws":
+        estate = load_aws(path, gateway)
     elif source == "apim":
         estate = load_apim(path, gateway)
     elif source == "kong":

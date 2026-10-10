@@ -70,6 +70,20 @@ def _parse_policy(raw: dict | None) -> Policy:
     )
 
 
+def _resolve(node, doc: dict, depth: int = 0):
+    """Follow a local ``$ref`` (``#/components/...``); leave others as is."""
+    while isinstance(node, dict) and "$ref" in node and depth < 10:
+        ref = str(node["$ref"])
+        if not ref.startswith("#/"):
+            return {}
+        target = doc
+        for part in ref[2:].split("/"):
+            part = part.replace("~1", "/").replace("~0", "~")
+            target = target.get(part) if isinstance(target, dict) else None
+        node, depth = target or {}, depth + 1
+    return node if isinstance(node, dict) else {}
+
+
 def _schema_type(schema: dict) -> str:
     t = str(schema.get("type", "string")).lower()
     return t if t in ("string", "integer", "number", "boolean") else "string"
@@ -133,7 +147,7 @@ def parse_document(
             estate.endpoints.append(
                 _parse_operation(
                     slug, path, method, operation, shared_params,
-                    default_policy,
+                    default_policy, doc,
                 )
             )
 
@@ -149,6 +163,7 @@ def _parse_operation(
     operation: dict,
     shared_params: list,
     default_policy: Policy,
+    doc: dict | None = None,
 ) -> Endpoint:
     operation_id = str(
         operation.get("operationId")
@@ -158,8 +173,10 @@ def _parse_operation(
     policy = default_policy.merge(_parse_policy(operation.get("x-oxvara")))
 
     parameters: list[Parameter] = []
+    doc = doc or {}
     for raw in list(shared_params) + list(operation.get("parameters", []) or []):
-        if not isinstance(raw, dict):
+        raw = _resolve(raw, doc)
+        if not isinstance(raw, dict) or not raw:
             continue
         parameters.append(
             Parameter(
@@ -167,16 +184,16 @@ def _parse_operation(
                 location=str(raw.get("in", "query")).lower(),
                 required=bool(raw.get("required", False))
                 or str(raw.get("in", "")).lower() == "path",
-                schema_type=_schema_type(raw.get("schema", {}) or {}),
+                schema_type=_schema_type(_resolve(raw.get("schema", {}) or {}, doc)),
             )
         )
 
     body_properties: list[BodyProperty] = []
     body_raw = False
-    request_body = operation.get("requestBody") or {}
+    request_body = _resolve(operation.get("requestBody") or {}, doc)
     content = request_body.get("content", {}) or {}
     media = content.get("application/json") or {}
-    schema = media.get("schema", {}) or {}
+    schema = _resolve(media.get("schema", {}) or {}, doc)
     if schema:
         required = set(schema.get("required", []) or [])
         props = schema.get("properties") or {}
@@ -186,7 +203,7 @@ def _parse_operation(
                     BodyProperty(
                         name=str(name),
                         required=str(name) in required,
-                        schema_type=_schema_type(prop or {}),
+                        schema_type=_schema_type(_resolve(prop or {}, doc)),
                     )
                 )
         else:

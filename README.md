@@ -2,7 +2,8 @@
 
 **Every gateway secures its own MCP. Nobody governs all of them.**
 
-Apigee, Azure APIM and Kong each turn their own APIs into MCP tools now.
+Apigee, Azure APIM, Kong and AWS (Bedrock AgentCore Gateway) each turn
+APIs into MCP tools now.
 But about a third of organizations already run more than one API
 gateway ([Postman, 2025](https://www.postman.com/state-of-api/2025/)),
 and no vendor will govern the others.
@@ -11,7 +12,8 @@ Oxvara is a vendor-neutral governance layer for agent access to your
 API estate. It reads the gateway configuration you already have, from
 any of them, and gives you:
 
-- **One inventory** of every agent-facing tool across Apigee, APIM and Kong.
+- **One inventory** of every agent-facing tool across Amazon API Gateway,
+  Apigee, Azure APIM and Kong, and across accounts and stages.
 - **One policy check**, including rules mapped to the OWASP MCP Top 10,
   with SARIF output for GitHub code scanning.
 - **A lockfile and a drift gate**: CI fails when someone weakens auth,
@@ -31,28 +33,45 @@ It does not replace your gateways or re-implement what they do. It reads them.
 ```bash
 pip install "oxvara @ git+https://github.com/kagithamanoj/oxvara.git"
 
-# Each input is an OpenAPI file, an Apigee bundle, an APIM export or a
-# Kong decK file. Append @https://host for the gateway it is served on.
+# Each input is an OpenAPI file, an AWS API Gateway export, an Apigee
+# bundle, an APIM export or a Kong decK file. Append @https://host for the gateway it is served on.
 APIGEE="examples/apigee@https://apigee.example.com"
 APIM="examples/apim"
+AWS="examples/aws/orders-api"
 KONG="examples/kong/kong.yaml@https://kong.example.com"
 
-# one table across all three gateways
-oxvara inventory $APIGEE $APIM $KONG
+# one table across all four gateways
+oxvara inventory $AWS $APIGEE $APIM $KONG
 
 # policy check: strict + OWASP MCP rules (add --format sarif for code scanning)
-oxvara validate --pack strict --pack owasp-mcp $APIGEE $APIM $KONG
+oxvara validate --pack strict --pack owasp-mcp $AWS $APIGEE $APIM $KONG
 
 # record the reviewed tool surface, then gate changes against it
-oxvara lock $APIGEE $APIM $KONG -o oxvara.lock.json
-oxvara drift --lock oxvara.lock.json $APIGEE $APIM $KONG
+oxvara lock $AWS $APIGEE $APIM $KONG -o oxvara.lock.json
+oxvara drift --lock oxvara.lock.json $AWS $APIGEE $APIM $KONG
 
-# optional: compile one MCP server that fronts all three
-oxvara compile $APIGEE $APIM $KONG -o server.py
+# optional: compile one MCP server that fronts all of them
+oxvara compile $AWS $APIGEE $APIM $KONG -o server.py
 ```
 
 A ready-to-copy GitHub Actions gate is in
 [examples/ci/oxvara-gate.yml](examples/ci/oxvara-gate.yml).
+
+## On AWS: Oxvara and AgentCore Gateway
+
+Amazon Bedrock AgentCore Gateway turns OpenAPI specs, Lambda functions
+and API Gateway REST APIs into MCP tools. Oxvara works alongside it, on
+the API Gateway configuration those tools depend on:
+
+- **Inventory** every agent-reachable API Gateway method across APIs,
+  stages and accounts, in one table.
+- **Validate** that each one has an API key, Cognito or Lambda
+  authorizer, and a throttle or usage plan before agents can reach it.
+- **Lock and drift-gate** it, so "API key required" switched off or a
+  usage plan loosened fails CI instead of reaching production quietly.
+
+AgentCore makes your APIs callable by agents; Oxvara proves the policy
+behind them is right and stays right.
 
 ## Why not just use your vendor's MCP export?
 
@@ -60,7 +79,7 @@ If your whole estate lives behind one gateway, use it. Oxvara is for
 the estates that don't, and for the questions vendor features don't
 answer:
 
-| | Vendor-native MCP (Apigee, APIM, Kong, MuleSoft) | Oxvara |
+| | Vendor-native MCP (AgentCore Gateway, Apigee, APIM, Kong, MuleSoft) | Oxvara |
 | --- | --- | --- |
 | Scope | That vendor's estate | All of them, one policy model |
 | Inventory of agent-facing tools | Per vendor console | One table, JSON or CSV |
@@ -82,6 +101,18 @@ would call the recorded backend directly, because that skips every
 policy on the gateway.
 
 ## Input sources
+
+**Amazon API Gateway (REST).** A directory with the stage export
+(`aws apigateway get-export --export-type oas30 --parameters
+extensions=apigateway`), plus `stage.json` (`get-stage`) and
+`usage-plans.json` (`get-usage-plans`), since throttling does not travel
+with the export. API-key requirements, Cognito user pool and Lambda
+authorizers map to auth, with OpenAPI semantics (alternatives: weakest
+wins; schemes in one requirement: strongest wins). Rate limits are the
+tightest of stage default, stage method settings, usage plan throttle
+and quota, and usage plan method throttles. IAM (SigV4) auth is reported,
+not modeled. Tools call the stage invoke URL; integration URIs are kept
+as the upstream so a gateway bypass is caught. See `examples/aws/`.
 
 **OpenAPI 3.x.** Governance comes from `x-oxvara` blocks: one at the
 root for estate defaults, one per operation to override. See
@@ -176,13 +207,14 @@ cannot inject code into the server.
 
 ## Project status
 
-**Working now:** OpenAPI, Apigee, Azure APIM and Kong importers;
+**Working now:** OpenAPI, Amazon API Gateway, Apigee, Azure APIM and Kong importers;
 multi-gateway merge; inventory; `strict` and `owasp-mcp` packs with
 SARIF; lockfile and drift gate; generated MCP servers with OAuth2
 (client credentials, RFC 8693 exchange), audit log, tool annotations
 and injection-safe codegen; CI on Python 3.10 to 3.13.
 
-**Not built yet:** MuleSoft and AWS API Gateway importers; live import
+**Not built yet:** API Gateway HTTP APIs (v2) and MuleSoft importers;
+SigV4 signing for IAM-authorized methods; multi-account collection; live import
 from gateway management APIs; remote (HTTP) MCP transport with RFC 9728
 metadata; per-consumer/per-product policy; a shared rate budget across
 replicas. See the roadmap in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
