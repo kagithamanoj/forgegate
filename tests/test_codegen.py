@@ -22,7 +22,7 @@ def test_generated_source_is_valid_python():
 
 def test_generated_source_registers_three_tools():
     src = _source()
-    assert src.count("@mcp.tool()") == 3
+    assert src.count("@mcp.tool(") == 3
     assert "def petstore_list_pets(" in src
     assert "def petstore_create_pet(" in src
     assert "def petstore_get_pet(" in src
@@ -30,11 +30,87 @@ def test_generated_source_registers_three_tools():
 
 def test_generated_source_carries_inherited_policy():
     src = _source()
-    assert '"petstore_create_pet": (10, 60)' in src
-    assert '"petstore_list_pets": (100, 60)' in src
+    assert "'petstore_create_pet': (10, 60)" in src
+    assert "'petstore_list_pets': (100, 60)" in src
     assert "X-API-Key" in src
     assert "OXVARA_API_KEY" in src
     assert "Rate limit: 10/minute" in src
+
+
+def test_tool_annotations_follow_http_semantics():
+    src = _source()
+    assert "readOnlyHint=True, destructiveHint=False, idempotentHint=True" in src
+    assert "readOnlyHint=False, destructiveHint=False, idempotentHint=False" in src
+
+
+def _estate_with(**endpoint_fields):
+    from oxvara.models import ApiEstate, Endpoint, Parameter
+
+    estate = ApiEstate(title="T", slug="t", version="1", base_url="https://x.example")
+    fields = {"operation_id": "op", "tool_name": "t_op", "method": "GET", "path": "/a",
+              "summary": "s", "description": "", "parameters": []}
+    fields.update(endpoint_fields)
+    estate.endpoints.append(Endpoint(**fields))
+    return estate, Parameter
+
+
+def test_hostile_parameter_names_cannot_inject_code(tmp_path):
+    from oxvara.models import Parameter
+
+    evil = 'x=1): pass\nimport os; os.system("touch PWNED")  #'
+    estate, _ = _estate_with(parameters=[
+        Parameter(name=evil, location="query", required=True, schema_type="string"),
+        Parameter(name="class", location="query", required=False, schema_type="string"),
+        Parameter(name="requests", location="query", required=False, schema_type="string"),
+        Parameter(name="pet-id", location="path", required=True, schema_type="string"),
+    ], path="/a/{pet-id}")
+    src = generate_server(estate)
+    tree = ast.parse(src)
+    funcs = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "t_op"]
+    assert len(funcs) == 1
+    arg_names = [a.arg for a in funcs[0].args.args]
+    assert all(a.isidentifier() for a in arg_names)
+    assert "class_" in arg_names and "requests_" in arg_names and "pet_id" in arg_names
+    # no top-level statement other than the expected ones was smuggled in
+    assert not any(
+        isinstance(n, ast.Expr) and "system" in ast.dump(n) for n in tree.body
+    )
+    # the wire names are preserved as string keys
+    assert "'pet-id': pet_id" in src
+    assert repr(evil) in src
+
+
+def test_hostile_title_and_url_are_literals():
+    estate, _ = _estate_with()
+    estate.title = 'Bad"""\nimport os'
+    estate.base_url = 'https://x"; import os; "'
+    src = generate_server(estate)
+    ast.parse(src)
+    assert "BASE_URL = 'https://x\"; import os; \"'" in src
+
+
+def test_header_parameters_are_sent_as_headers(tmp_path, monkeypatch):
+    import importlib.util
+
+    import requests
+
+    from oxvara.models import Parameter
+
+    calls = []
+    monkeypatch.setattr(requests, "request",
+                        lambda m, u, **kw: calls.append(kw) or type(
+                            "R", (), {"text": "", "status_code": 200,
+                                      "raise_for_status": lambda self: None})())
+    estate, _ = _estate_with(parameters=[
+        Parameter(name="X-Request-Id", location="header", required=True, schema_type="string"),
+    ])
+    out = tmp_path / "s.py"
+    out.write_text(generate_server(estate), encoding="utf-8")
+    spec = importlib.util.spec_from_file_location("s_hdr", out)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    mod.t_op(X_Request_Id="abc")
+    assert calls[-1]["headers"]["X-Request-Id"] == "abc"
 
 
 def test_generated_source_mentions_regeneration():
@@ -46,7 +122,7 @@ def test_generated_source_mentions_regeneration():
 
 def test_path_parameter_is_substituted_into_url():
     src = _source()
-    assert 'url = BASE_URL + _fill_path("/pets/{petId}", {"petId": petId})' in src
+    assert "_ox_url = BASE_URL + _fill_path('/pets/{petId}', {'petId': petId})" in src
 
 
 def test_each_tool_gets_its_own_auth_call():
@@ -84,8 +160,8 @@ def test_each_tool_gets_its_own_auth_call():
     )
     src = generate_server(estate, filename="mixed.py")
     ast.parse(src)
-    assert 'headers.update(_auth_headers("apiKey", "X-Key", "header"))' in src
-    assert 'headers.update(_auth_headers("bearer", "", "header"))' in src
+    assert "_ox_headers.update(_auth_headers('apiKey', 'X-Key', 'header'))" in src
+    assert "_ox_headers.update(_auth_headers('bearer', '', 'header'))" in src
     # the old bug generated one shared _auth_headers() call for every tool
     assert "_auth_headers()" not in src
 

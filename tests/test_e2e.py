@@ -139,6 +139,8 @@ def test_oauth2_client_credentials_cached(server_module, monkeypatch):
         return Tok()
 
     monkeypatch.setattr(requests, "post", fake_post)
+    monkeypatch.delenv("OXVARA_OAUTH_ACCESS_TOKEN", raising=False)
+    monkeypatch.delenv("OXVARA_OAUTH_SUBJECT_TOKEN", raising=False)
     monkeypatch.setenv("OXVARA_OAUTH_TOKEN_URL", "https://idp.test/token")
     monkeypatch.setenv("OXVARA_OAUTH_CLIENT_ID", "id")
     monkeypatch.setenv("OXVARA_OAUTH_CLIENT_SECRET", "sec")
@@ -148,14 +150,58 @@ def test_oauth2_client_credentials_cached(server_module, monkeypatch):
     assert posts[0][1]["data"]["grant_type"] == "client_credentials"
 
 
-def test_oauth2_delegated_token_wins(server_module, monkeypatch):
-    monkeypatch.setenv("OXVARA_OAUTH_ACCESS_TOKEN", "user-tok")
-    assert server_module._auth_headers("oauth2", "", "") == {"Authorization": "Bearer user-tok"}
+def test_oauth2_pre_issued_token_wins(server_module, monkeypatch):
+    monkeypatch.setenv("OXVARA_OAUTH_ACCESS_TOKEN", "upstream-tok")
+    assert server_module._auth_headers("oauth2", "", "") == {
+        "Authorization": "Bearer upstream-tok"
+    }
+
+
+def test_oauth2_token_exchange_carries_user_identity(server_module, monkeypatch):
+    import requests
+
+    posts = []
+
+    class Tok:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"access_token": "exchanged", "expires_in": 600}
+
+    monkeypatch.setattr(requests, "post", lambda url, **kw: posts.append(kw) or Tok())
+    monkeypatch.delenv("OXVARA_OAUTH_ACCESS_TOKEN", raising=False)
+    monkeypatch.setenv("OXVARA_OAUTH_TOKEN_URL", "https://idp.test/token")
+    monkeypatch.setenv("OXVARA_OAUTH_CLIENT_ID", "oxvara")
+    monkeypatch.setenv("OXVARA_OAUTH_CLIENT_SECRET", "sec")
+    monkeypatch.setenv("OXVARA_OAUTH_SUBJECT_TOKEN", "alice-token")
+    monkeypatch.setenv("OXVARA_OAUTH_AUDIENCE", "https://orders.example.com")
+    assert server_module._auth_headers("oauth2", "", "") == {
+        "Authorization": "Bearer exchanged"
+    }
+    data = posts[0]["data"]
+    assert data["grant_type"] == "urn:ietf:params:oauth:grant-type:token-exchange"
+    assert data["subject_token"] == "alice-token"
+    assert data["subject_token_type"] == "urn:ietf:params:oauth:token-type:access_token"
+    assert data["audience"] == "https://orders.example.com"
+    # cached per subject: a second call does not hit the IdP again
+    server_module._auth_headers("oauth2", "", "")
+    assert len(posts) == 1
+
+
+def test_audit_records_subject(server_module, tmp_path, monkeypatch):
+    log = tmp_path / "audit.jsonl"
+    monkeypatch.setenv("OXVARA_AUDIT_LOG", str(log))
+    monkeypatch.setenv("OXVARA_AUDIT_SUBJECT", "alice@example.com")
+    server_module.petstore_list_pets()
+    records = [__import__("json").loads(line) for line in log.read_text().splitlines()]
+    assert [r["event"] for r in records] == ["call", "response"]
+    assert all(r["subject"] == "alice@example.com" for r in records)
 
 
 def test_oauth2_unconfigured_fails_loudly(server_module, monkeypatch):
-    for v in ("ACCESS_TOKEN", "TOKEN_URL", "CLIENT_ID", "CLIENT_SECRET"):
+    for v in ("ACCESS_TOKEN", "SUBJECT_TOKEN", "TOKEN_URL", "CLIENT_ID", "CLIENT_SECRET"):
         monkeypatch.delenv("OXVARA_OAUTH_" + v, raising=False)
-    server_module._oauth_cache["token"] = ""
+    server_module._oauth_cache.clear()
     with pytest.raises(server_module.OxvaraError):
         server_module._auth_headers("oauth2", "", "")
