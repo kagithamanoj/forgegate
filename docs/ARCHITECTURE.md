@@ -1,95 +1,133 @@
 # Oxvara architecture
 
-Oxvara is the vendor-neutral control plane for agentic access to your
-API estate. Apigee and Azure APIM now expose their own APIs as MCP
-servers, but no enterprise runs one gateway, and no vendor will govern
-the others. Oxvara reads the estate wherever it lives, normalizes every
-gateway's policies into one model, and emits MCP servers your agents
-can call, with the governance carried over instead of re-entered.
+Oxvara is a vendor-neutral governance layer for agent access to an API
+estate. Apigee, Azure APIM and Kong each expose their own APIs as MCP
+tools now, and each governs only its own estate. Oxvara reads all of
+them, normalizes their policies into one model, and works from that
+model: one inventory, one set of policy checks, one lockfile of the
+reviewed agent-facing surface, drift detection against it, and an
+optional compiled MCP server.
 
 ## The pipeline
 
 ```
-OpenAPI 3.x + x-oxvara annotations
-        |
-        v
-   +---------+      +----------------+
-   | Ingest  | ---> | Normalize      |
-   | (parser)|      | (policy merge) |
-   +---------+      +----------------+
-                           |
-                           v
-                    +--------------+
-                    | Generate     |
-                    | (codegen)    |
-                    +--------------+
-                           |
-                           v
-              runnable MCP server module
-              (FastMCP, stdio transport)
+ OpenAPI + x-oxvara   Apigee bundle   APIM export   Kong decK file
+          \                 |              |              /
+           +----------------+--------------+-------------+
+                                  |
+                       Ingest (parser, exporters/)
+                                  |
+                       Normalize (models.py): ApiEstate
+                       per-endpoint policy, gateway URL, source
+                                  |
+        +-------------+-----------+------------+--------------+
+        |             |                        |              |
+    inventory      validate                lock / drift     compile
+   (cli.py)      (packs.py)                 (lock.py)     (codegen.py)
+   one table     strict, owasp-mcp       reviewed surface  FastMCP server
+                 text/json/SARIF         + change gate      (stdio)
 ```
 
-### 1. Ingest (`oxvara/parser.py`)
+### 1. Ingest
 
-Reads an OpenAPI 3.x document (YAML or JSON) and walks every path and
-operation. It records the HTTP method, path template, parameters,
-request body shape, and the raw `x-oxvara` extension blocks. Anything
-outside OpenAPI 3.x is rejected with a clear error.
+| Source | Module | Reads |
+| --- | --- | --- |
+| OpenAPI 3.x | `oxvara/parser.py` | operations + `x-oxvara` policy blocks |
+| Apigee | `oxvara/exporters/apigee.py` | proxy flows, PreFlow/flow steps, VerifyAPIKey, OAuthV2, Quota, SpikeArrest; skips `enabled="false"` policies |
+| Azure APIM | `oxvara/exporters/apim.py` | exported OpenAPI + `<inbound>` policy XML (rate-limit, quota, check-header, authentication-basic, validate-jwt) |
+| Kong | `oxvara/exporters/kong.py` | decK services, routes, global/service/route plugins (key-auth, basic-auth, jwt, oauth2, openid-connect, rate-limiting, rate-limiting-advanced, request-termination) |
 
-### 2. Normalize (`oxvara/models.py`)
+Anything an importer cannot model faithfully (consumer-scoped plugins,
+`hmac-auth`, regex routes without named captures, routes with no
+methods) is recorded as an import note and shown by every command,
+instead of being guessed at.
 
-The parser output is converted into a small internal model: `ApiEstate`,
-`Endpoint`, `Parameter`, `BodyProperty`, and `Policy`. The code generator
-only sees this model, so adding a new input format (an Apigee export, an
-Azure APIM export) means writing a new parser, not touching the
-generator.
+### 2. The gateway URL rule
 
-### 3. Policy inheritance
+Gateway exports describe policy but often not the public host the API
+is served on. Apigee bundles name the target backend; Kong services
+name the upstream. Calling either directly would skip every policy the
+importer just read. So tools always call the gateway:
 
-This is the core idea. A root-level `x-oxvara` block declares the
-estate defaults: base URL, auth scheme, rate limit, timeout. An operation
-may carry its own `x-oxvara` block that overrides individual fields.
-Anything not overridden is inherited.
+- Apigee: `gateway URL + proxy BasePath`
+- Kong: `gateway URL` (route paths are proxy paths)
+- APIM: the gateway URL APIM writes into the exported `servers` entry
 
-```
-estate defaults (x-oxvara at root)
-  auth: apiKey / X-API-Key
-  rateLimit: 100/minute
-  timeout: 30s
-        |
-        +-- GET /pets            (inherits everything)
-        +-- POST /pets           (overrides rateLimit: 10/minute)
-        +-- GET /pets/{petId}    (inherits everything)
-```
+The gateway URL is given per input as `PATH@https://host`, or for all
+inputs with `--gateway-url`. Without it, the estate has no base URL,
+the strict pack fails, and the `owasp-mcp` pack's
+`MCP07-gateway-bypass` rule catches a base URL that points at the
+recorded upstream.
 
-The merge rule is simple and explicit: an operation-level value wins
-when present, otherwise the estate default applies. `Policy.merge()`
-implements this, and the parser tests pin the behavior.
+### 3. Normalize and merge
 
-### 4. Generate (`oxvara/codegen.py`)
+Every importer produces an `ApiEstate` of `Endpoint`s, each with one
+resolved `Policy` (auth, rate limit, timeout). Precedence follows each
+gateway's own semantics: Apigee flow steps over PreFlow, APIM operation
+policy over API policy, Kong route plugins over service over global.
 
-For each endpoint the generator emits one MCP tool function:
+Several inputs merge into one estate. Endpoints keep their own base URL
+and a `source` label (`kong:orders`), and tool names are de-duplicated,
+so one MCP server can front Apigee, APIM and Kong at once.
 
-- The function signature comes from path parameters (required), query
-  parameters (optional), and flattened request body properties.
-- The docstring carries the operation summary plus the inherited policy,
-  so the agent sees the governance in the tool description.
-- The body injects auth credentials from environment variables
-  (`OXVARA_API_KEY`, `OXVARA_BEARER_TOKEN`), substitutes path
-  parameters into the URL, and enforces the inherited rate limit with a
-  client-side token bucket before any request leaves the process.
+### 4. Policy packs (`oxvara/packs.py`)
 
-The emitted module header records the Oxvara version and the source
-spec, so a generated server is always traceable back to what produced
-it. Generated files are meant to be regenerated, not hand-edited.
+- `strict`: gateway URL present; auth and a rate limit on every
+  operation; no budget above 1000 requests/minute.
+- `owasp-mcp`: checks from the OWASP MCP Top 10 (2025, v0.1) that
+  configuration alone can answer. See [SECURITY.md](SECURITY.md).
 
-## Annotation reference
+`oxvara validate` runs one or more packs per input and prints text,
+JSON or SARIF (for GitHub code scanning).
+
+### 5. Lockfile and drift (`oxvara/lock.py`)
+
+`oxvara lock` writes `oxvara.lock.json`: for every tool, its source,
+route, gateway URL, auth, rate limit, timeout, and SHA-256 hashes of
+the description and input schema the agent sees. It is deterministic so
+it reviews cleanly in a pull request.
+
+`oxvara drift` re-imports the estate and compares:
+
+| Change | Severity |
+| --- | --- |
+| auth weakened (oauth2 -> apiKey, anything -> none) | error |
+| rate limit loosened or removed | error |
+| tool now calls a different base URL, or route changed | error |
+| tool description or schema changed (tool poisoning, OWASP MCP03) | warning |
+| new tool exposed | warning |
+| auth tightened, rate limit tightened, tool removed, timeout changed | note |
+
+`--fail-on` sets the threshold (default `warning`).
+
+### 6. Compile (`oxvara/codegen.py`)
+
+Emits one FastMCP tool per endpoint:
+
+- Inputs come from path, query and header parameters and flattened JSON
+  body properties. Spec-derived names become sanitized, non-shadowing
+  Python identifiers; wire names stay as string keys.
+- Every spec-derived string reaches the generated source only as a
+  `repr()` literal, so a hostile spec cannot inject code.
+- Tool annotations follow HTTP semantics (GET read-only, DELETE/PUT/PATCH
+  destructive). They are hints for clients, not controls.
+- Credentials come from the environment. OAuth2 supports a pre-issued
+  upstream token, RFC 8693 token exchange of the end user's token, or
+  the client-credentials grant. The token an MCP client presents to the
+  server is never forwarded upstream (MCP authorization spec,
+  2025-11-25: token passthrough is forbidden).
+- The inherited rate limit is enforced client-side before a request
+  leaves the process; the gateway enforces it again.
+- Every call and response status is audited as JSON lines, with the
+  end-user subject when configured.
+
+## Annotation reference (OpenAPI input)
 
 ```yaml
 x-oxvara:
   baseUrl: https://api.example.com/v1   # fallback: servers[0].url
   auth:
-    kind: apiKey      # apiKey | bearer | oauth2 | none
+    kind: apiKey      # apiKey | bearer | basic | oauth2 | none
     name: X-API-Key   # header or query name for apiKey
     in: header        # header | query
   rateLimit:
@@ -98,31 +136,24 @@ x-oxvara:
   timeout: 30         # seconds
 ```
 
-OAuth2 is supported via delegated token passthrough or the
-client-credentials grant. Authorization-code and RFC 8693 token exchange
-(true per-user delegation) are on the roadmap.
+## Known limits
 
-## What this prototype does not do yet
-
-- No Kong exporter yet. Apigee and Azure APIM exporters are built and
-  tested (see `oxvara/exporters/`).
-- No response schema validation and no retry logic in generated servers.
-- The rate limiter is per-process and in-memory. A shared budget store
-  is on the roadmap.
-- Request bodies that are not flat JSON objects are passed through as a
-  raw JSON string.
+- The policy model holds one rate limit per operation (the lowest
+  sustained rate wins). Burst and sustained limits are not modeled
+  separately.
+- Per-consumer and per-product policy (Apigee products, Kong consumer
+  plugins, APIM subscriptions) is not modeled; it is reported.
+- The generated server's rate limiter is per-process and in-memory.
+- Generated servers use stdio transport; a remote (streamable HTTP)
+  server with its own OAuth protected-resource metadata is not built.
+- Kong `jwt` maps to a client-presented bearer token; Oxvara does not
+  mint JWTs.
 
 ## Roadmap
 
-1. ~~Apigee X and Azure APIM exporters~~ Done.
-2. ~~Policy packs~~ Done (`strict` ships; more packs to come, for
-   example per-team budgets and data-classification rules).
-3. ~~Dry-run and diff mode~~ Done (`oxvara diff`, `oxvara validate`).
-4. Kong exporter: the third major gateway.
-5. Shared rate budget store (Redis) for multi-replica deployments.
-6. Response validation against the OpenAPI response schemas.
-7. One agent identity across gateways, with delegated OAuth2 (RFC 8693
-   token exchange) so agents act with scoped authority.
-8. Unified audit log across the whole estate, one trail per agent.
-9. Drift detection: flag when a gateway's policy config moves under a
-   compiled server.
+1. MuleSoft and AWS API Gateway importers.
+2. Live import from gateway management APIs (instead of exports).
+3. Remote MCP transport with RFC 9728 protected-resource metadata.
+4. Shared rate budget store for multi-replica deployments.
+5. Per-consumer / per-product policy in the model.
+6. Response validation against OpenAPI response schemas.
