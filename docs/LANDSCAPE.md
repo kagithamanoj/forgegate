@@ -10,6 +10,7 @@ vendor capabilities change quickly, so verify before quoting.
 | Google Apigee | MCP proxy from an OpenAPI 3.0.x spec; existing Apigee policies govern the tools | Not available for Apigee hybrid ([overview](https://docs.cloud.google.com/apigee/docs/api-platform/apigee-mcp/apigee-mcp-overview)) |
 | Azure API Management | Any managed REST API can be exposed as an MCP server; each operation becomes a tool | Policies apply to all tools of an MCP server, not per tool; tools only (no resources or prompts); not in workspaces ([overview](https://learn.microsoft.com/azure/api-management/mcp-server-overview)) |
 | Kong | Konnect autogenerates MCP servers from Kong-managed APIs; `deck file openapi2mcp` converts OpenAPI to an MCP route with `x-kong-mcp-acl` scopes | Autogeneration not available on-prem ([openapi2mcp](https://developer.konghq.com/deck/file/openapi2mcp/)) |
+| AWS (Bedrock AgentCore Gateway) | Converts OpenAPI specs, Smithy models, Lambda functions and existing API Gateway REST APIs into MCP tools behind one gateway endpoint with an OAuth authorizer | Turns APIs into tools; does not check or pin the API Gateway policy (API keys, authorizers, usage plans) behind them ([docs](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/gateway.html)) |
 | MuleSoft | Anypoint converts an API or Mule app to an MCP server; MCP Connector | ([Salesforce announcement](https://developer.salesforce.com/blogs/2025/06/introducing-mcp-support-across-salesforce)) |
 
 **Implication.** Turning one vendor's APIs into MCP tools is a feature

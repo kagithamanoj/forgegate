@@ -34,6 +34,7 @@ optional compiled MCP server.
 | --- | --- | --- |
 | OpenAPI 3.x | `oxvara/parser.py` | operations + `x-oxvara` policy blocks |
 | Apigee | `oxvara/exporters/apigee.py` | proxy flows, PreFlow/flow steps, VerifyAPIKey, OAuthV2, Quota, SpikeArrest; skips `enabled="false"` policies |
+| Amazon API Gateway (REST) | `oxvara/exporters/aws.py` | stage export (oas30 + apigateway extensions), `get-stage` method settings, usage plan throttle/quota/method throttles; API key, Cognito and Lambda authorizers |
 | Azure APIM | `oxvara/exporters/apim.py` | exported OpenAPI + `<inbound>` policy XML (rate-limit, quota, check-header, authentication-basic, validate-jwt) |
 | Kong | `oxvara/exporters/kong.py` | decK services, routes, global/service/route plugins (key-auth, basic-auth, jwt, oauth2, openid-connect, rate-limiting, rate-limiting-advanced, request-termination) |
 
@@ -52,6 +53,8 @@ importer just read. So tools always call the gateway:
 - Apigee: `gateway URL + proxy BasePath`
 - Kong: `gateway URL` (route paths are proxy paths)
 - APIM: the gateway URL APIM writes into the exported `servers` entry
+- AWS: the stage invoke URL from the export's `servers` entry (or a
+  custom domain passed as the gateway URL)
 
 The gateway URL is given per input as `PATH@https://host`, or for all
 inputs with `--gateway-url`. Without it, the estate has no base URL,
@@ -151,8 +154,9 @@ x-oxvara:
 
 ## Roadmap
 
-1. MuleSoft and AWS API Gateway importers.
-2. Live import from gateway management APIs (instead of exports).
+1. API Gateway HTTP APIs (v2), MuleSoft importers; SigV4 for IAM methods.
+2. Live import from gateway management APIs, including AWS Organizations
+   multi-account collection.
 3. Remote MCP transport with RFC 9728 protected-resource metadata.
 4. Shared rate budget store for multi-replica deployments.
 5. Per-consumer / per-product policy in the model.
