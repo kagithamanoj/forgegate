@@ -15,11 +15,12 @@ govern what a caller (or an agent) may do. Mapping:
   rate limit apply, the tighter one wins.
 - ``<check-header name="...">``: an API key expected in that header.
 - ``<authentication-basic>``: basic auth.
-- ``<validate-jwt>``: oauth2. The generated server declares this and
-  raises NotImplementedError at call time rather than faking it.
+- ``<validate-jwt>``: oauth2 (the generated server obtains a token; see
+  the README for the supported grants).
 
 The base URL comes from the OpenAPI document's ``servers`` entry, which
-is what APIM writes on export.
+is the APIM gateway URL APIM writes on export, so tools call through the
+gateway. A gateway URL passed by the caller overrides it.
 """
 
 from __future__ import annotations
@@ -29,7 +30,7 @@ import xml.etree.ElementTree as ET
 
 import yaml
 
-from ..models import AuthPolicy, Policy, RateLimit
+from ..models import ApiEstate, AuthPolicy, Policy, RateLimit
 from ..parser import _servers_base_url, parse_document
 from ..util import normalize_rate
 
@@ -104,7 +105,7 @@ def _find_openapi(apim_dir: str) -> str:
     )
 
 
-def load_apim(apim_dir: str) -> Policy:
+def load_apim(apim_dir: str, gateway_url: str = "") -> ApiEstate:
     """Load an APIM export directory into an ApiEstate."""
     openapi_path = _find_openapi(apim_dir)
     with open(openapi_path, "r", encoding="utf-8") as fh:
@@ -116,7 +117,10 @@ def load_apim(apim_dir: str) -> Policy:
         raise TypeError(f"{openapi_path} must contain a mapping")
 
     api_policy = _inbound_policy(os.path.join(apim_dir, "policy.xml"))
-    estate = parse_document(doc, api_policy, _servers_base_url(doc))
+    estate = parse_document(
+        doc, api_policy, gateway_url.rstrip("/") or _servers_base_url(doc)
+    )
+    estate.kind = "apim"
 
     operations_dir = os.path.join(apim_dir, "operations")
     for ep in estate.endpoints:

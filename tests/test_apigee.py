@@ -12,15 +12,48 @@ BUNDLE = os.path.join(
 
 
 def test_bundle_loads_three_operations():
-    estate = load_bundle(BUNDLE)
+    estate = load_bundle(BUNDLE, "https://apigee.example.com")
     assert estate.title == "petstore"
-    assert estate.base_url == "https://petstore.example.com/api"
+    assert estate.kind == "apigee"
     assert len(estate.endpoints) == 3
     by_id = {ep.operation_id: ep for ep in estate.endpoints}
     assert by_id["list_pets"].method == "GET"
     assert by_id["list_pets"].path == "/pets"
     assert by_id["create_pet"].method == "POST"
     assert by_id["get_pet"].path == "/pets/{petId}"
+
+
+def test_tools_call_the_proxy_not_the_target_backend():
+    # Calling the target URL directly would skip VerifyAPIKey, Quota and
+    # SpikeArrest: every policy this exporter imports.
+    estate = load_bundle(BUNDLE, "https://apigee.example.com/")
+    assert estate.upstream_url == "https://petstore.example.com/api"
+    assert estate.base_url == "https://apigee.example.com/petstore/v1"
+    assert {ep.base_url for ep in estate.endpoints} == {
+        "https://apigee.example.com/petstore/v1"
+    }
+
+
+def test_missing_gateway_url_leaves_no_base_and_a_note():
+    estate = load_bundle(BUNDLE)
+    assert estate.base_url == ""
+    assert any("no gateway URL" in n for n in estate.notes)
+
+
+def test_disabled_policy_is_ignored(tmp_path):
+    import shutil
+
+    bundle = tmp_path / "b"
+    shutil.copytree(BUNDLE, bundle)
+    key = bundle / "apiproxy" / "policies" / "Verify-API-Key.xml"
+    key.write_text(
+        key.read_text(encoding="utf-8").replace(
+            'enabled="true"', 'enabled="false"', 1
+        ),
+        encoding="utf-8",
+    )
+    estate = load_bundle(str(bundle), "https://apigee.example.com")
+    assert all(ep.policy.auth.kind == "none" for ep in estate.endpoints)
 
 
 def test_global_verify_api_key_applies_to_every_operation():

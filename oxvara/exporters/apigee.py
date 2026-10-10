@@ -18,6 +18,12 @@ VerifyAPIKey and OAuthV2 map to auth; Quota and SpikeArrest map to rate
 limits. Flow-level policies override the global ones, mirroring how
 Apigee evaluates them.
 
+Generated tools call the Apigee proxy (gateway URL + the proxy's
+BasePath), never the target backend. The bundle does not record which
+host the proxy is served on, so the caller supplies it as the gateway
+URL. Without one the estate has no base URL and the strict pack fails:
+calling the backend directly would skip every policy imported here.
+
 Two honest simplifications are documented rather than hidden:
 
 - Quota policies that only carry a ``countRef`` (a per-product quota the
@@ -115,6 +121,8 @@ def _policy_from_file(path: str) -> Policy:
         root = ET.parse(path).getroot()
     except ET.ParseError:
         return policy
+    if (root.get("enabled") or "true").strip().lower() == "false":
+        return policy  # a disabled policy governs nothing
     tag = root.tag
     if tag == "VerifyAPIKey":
         auth = _parse_verify_api_key(root)
@@ -153,8 +161,12 @@ def _policies_for(names: list[str], policies_dir: str) -> Policy:
     return merged
 
 
-def load_bundle(bundle_dir: str) -> ApiEstate:
-    """Load an Apigee bundle directory into an ApiEstate."""
+def load_bundle(bundle_dir: str, gateway_url: str = "") -> ApiEstate:
+    """Load an Apigee bundle directory into an ApiEstate.
+
+    ``gateway_url`` is the scheme and host the proxy is served on, for
+    example ``https://api.example.com``. The proxy BasePath is appended.
+    """
     root = bundle_dir
     if os.path.isdir(os.path.join(bundle_dir, "apiproxy")):
         root = os.path.join(bundle_dir, "apiproxy")
@@ -173,8 +185,9 @@ def load_bundle(bundle_dir: str) -> ApiEstate:
     if not proxy_files:
         raise ValueError(f"no proxy endpoints found in {proxies_dir!r}")
 
-    # Base URL comes from the first target endpoint's backend URL.
-    base_url = ""
+    # The first target endpoint's backend URL is recorded as the upstream
+    # only, so packs can detect a configuration that would bypass Apigee.
+    upstream_url = ""
     if os.path.isdir(targets_dir):
         for name in sorted(os.listdir(targets_dir)):
             if not name.endswith(".xml"):
@@ -183,9 +196,10 @@ def load_bundle(bundle_dir: str) -> ApiEstate:
                 target = ET.parse(os.path.join(targets_dir, name)).getroot()
             except ET.ParseError:
                 continue
-            base_url = _text(target, "HTTPTargetConnection/URL").rstrip("/")
-            if base_url:
+            upstream_url = _text(target, "HTTPTargetConnection/URL").rstrip("/")
+            if upstream_url:
                 break
+    gateway_url = gateway_url.rstrip("/")
 
     title = "API"
     version = "1"
@@ -202,11 +216,22 @@ def load_bundle(bundle_dir: str) -> ApiEstate:
 
     slug = slugify(title)
     estate = ApiEstate(
-        title=title, slug=slug, version=version, base_url=base_url
+        title=title, slug=slug, version=version, base_url="",
+        kind="apigee", upstream_url=upstream_url,
     )
+    if not gateway_url:
+        estate.notes.append(
+            "no gateway URL given for this Apigee bundle; pass "
+            "--gateway-url (or PATH@https://host) so tools call the proxy "
+            "and its policies are enforced"
+        )
 
     for proxy_file in proxy_files:
         proxy = ET.parse(os.path.join(proxies_dir, proxy_file)).getroot()
+        base_path = _text(proxy, "HTTPProxyConnection/BasePath").rstrip("/")
+        proxy_base = f"{gateway_url}{base_path}" if gateway_url else ""
+        if proxy_base and not estate.base_url:
+            estate.base_url = proxy_base
         preflow = proxy.find("PreFlow")
         global_policy = Policy()
         if preflow is not None:
@@ -246,6 +271,7 @@ def load_bundle(bundle_dir: str) -> ApiEstate:
                     description="",
                     parameters=parameters,
                     policy=policy,
+                    base_url=proxy_base,
                 )
             )
 
