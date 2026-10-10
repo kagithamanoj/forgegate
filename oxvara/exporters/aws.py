@@ -21,7 +21,7 @@ Auth, from each operation's ``security`` (or the document default):
   issues the tokens)
 - any other authtype with an ``x-amazon-apigateway-authorizer`` (a Lambda
   authorizer): bearer, a token the client presents
-- ``awsSigv4`` (IAM): not modeled; reported as a note
+- ``awsSigv4`` (IAM): sigv4, signed with the caller's AWS credentials
 
 OpenAPI ``security`` is a list of alternatives, any one of which grants
 access. The effective protection is therefore the *weakest* alternative,
@@ -124,11 +124,7 @@ def _scheme_auth(name: str, scheme: dict, notes: list[str]) -> AuthPolicy | None
     if authtype == "cognito_user_pools":
         return AuthPolicy(kind="oauth2")
     if authtype.lower() == "awssigv4":
-        notes.append(
-            f"security scheme {name}: IAM (SigV4) auth is not modeled; "
-            "operations using only it are reported as unauthenticated"
-        )
-        return None
+        return AuthPolicy(kind="sigv4")  # IAM: signed with AWS credentials
     if authtype or scheme.get("x-amazon-apigateway-authorizer"):
         return AuthPolicy(kind="bearer")  # Lambda authorizer: client token
     if scheme.get("type") == "apiKey":

@@ -20,12 +20,12 @@ optional compiled MCP server.
                        Normalize (models.py): ApiEstate
                        per-endpoint policy, gateway URL, source
                                   |
-        +-------------+-----------+------------+--------------+
-        |             |                        |              |
-    inventory      validate                lock / drift     compile
-   (cli.py)      (packs.py)                 (lock.py)     (codegen.py)
-   one table     strict, owasp-mcp       reviewed surface  FastMCP server
-                 text/json/SARIF         + change gate      (stdio)
+        +-------------+-----------+------------+--------------+--------------+
+        |             |                        |              |              |
+    inventory      validate                lock / drift     compile    agentcore
+   (cli.py)      (packs.py)                 (lock.py)     (codegen.py) (agentcore.py)
+   one table     strict, owasp-mcp       reviewed surface  FastMCP server  Bedrock
+                 text/json/SARIF         + change gate      (stdio)      targets
 ```
 
 ### 1. Ingest
@@ -34,7 +34,8 @@ optional compiled MCP server.
 | --- | --- | --- |
 | OpenAPI 3.x | `oxvara/parser.py` | operations + `x-oxvara` policy blocks |
 | Apigee | `oxvara/exporters/apigee.py` | proxy flows, PreFlow/flow steps, VerifyAPIKey, OAuthV2, Quota, SpikeArrest; skips `enabled="false"` policies |
-| Amazon API Gateway (REST) | `oxvara/exporters/aws.py` | stage export (oas30 + apigateway extensions), `get-stage` method settings, usage plan throttle/quota/method throttles; API key, Cognito and Lambda authorizers |
+| Amazon API Gateway (REST) | `oxvara/exporters/aws.py` | stage export (oas30 + apigateway extensions), `get-stage` method settings, usage plan throttle/quota/method throttles; API key, Cognito, Lambda and IAM (SigV4) authorizers |
+| Amazon API Gateway (HTTP API, v2) | `oxvara/exporters/aws_v2.py` | `export-api` OAS30 export, `get-stage` DefaultRouteSettings and per-route RouteSettings; JWT, Lambda and IAM (SigV4) authorizers |
 | Azure APIM | `oxvara/exporters/apim.py` | exported OpenAPI + `<inbound>` policy XML (rate-limit, quota, check-header, authentication-basic, validate-jwt) |
 | Kong | `oxvara/exporters/kong.py` | decK services, routes, global/service/route plugins (key-auth, basic-auth, jwt, oauth2, openid-connect, rate-limiting, rate-limiting-advanced, request-termination) |
 
@@ -157,10 +158,8 @@ x-oxvara:
 
 ## Roadmap
 
-1. API Gateway HTTP APIs (v2) importer; SigV4 for IAM methods.
-2. Live import from gateway management APIs, including AWS Organizations
-   multi-account collection.
-3. Remote MCP transport with RFC 9728 protected-resource metadata.
-4. Shared rate budget store for multi-replica deployments.
-5. Per-consumer / per-product policy in the model.
+1. Live import from gateway management APIs.
+2. Remote MCP transport with RFC 9728 protected-resource metadata.
+3. Shared rate budget store for multi-replica deployments.
+4. Per-consumer / per-product policy in the model.
 6. Response validation against OpenAPI response schemas.

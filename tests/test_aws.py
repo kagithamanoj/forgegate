@@ -113,8 +113,8 @@ def test_iam_and_anonymous_operations(tmp_path):
     (api / "openapi.json").write_text(json.dumps(doc))
     estate = load_aws(str(api))
     ops = _ops(estate)
-    assert ops["reindex"].policy.auth.kind == "none"
-    assert any("IAM (SigV4)" in n for n in estate.notes)
+    assert ops["reindex"].policy.auth.kind == "sigv4"
+    assert not any("SigV4" in n for n in estate.notes)
     assert ops["health"].policy.auth.kind == "none"
 
 

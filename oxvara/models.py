@@ -13,8 +13,9 @@ from dataclasses import dataclass, field
 # Relative strength of each auth kind, used by drift detection to tell a
 # tightened policy from a weakened one. apiKey and basic are both shared
 # static secrets; bearer is a presented token; oauth2 is an issued,
-# scoped, expiring token.
-AUTH_STRENGTH = {"none": 0, "apiKey": 1, "basic": 1, "bearer": 2, "oauth2": 3}
+# scoped, expiring token; sigv4 is a request signed with AWS credentials,
+# bound to the request itself.
+AUTH_STRENGTH = {"none": 0, "apiKey": 1, "basic": 1, "bearer": 2, "oauth2": 3, "sigv4": 3}
 
 READ_ONLY_METHODS = {"GET", "HEAD", "OPTIONS"}
 
@@ -33,7 +34,7 @@ class RateLimit:
 
 @dataclass
 class AuthPolicy:
-    kind: str = "none"  # "apiKey" | "bearer" | "basic" | "oauth2" | "none"
+    kind: str = "none"  # "apiKey" | "bearer" | "basic" | "oauth2" | "sigv4" | "none"
     name: str = ""  # header or query name for apiKey
     location: str = "header"  # "header" | "query"
 

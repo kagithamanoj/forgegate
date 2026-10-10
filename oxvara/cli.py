@@ -9,7 +9,9 @@ import json
 import sys
 
 from . import __version__
+from .agentcore import build_targets
 from .codegen import tool_names, write_server
+from .collector import collect_aws
 from .inputs import detect_source, load_inputs, split_input
 from .lock import SEVERITY_ORDER, detect_drift, exceeds, read_lock, write_lock
 from .models import ApiEstate
@@ -226,6 +228,50 @@ def cmd_drift(args: argparse.Namespace) -> int:
     return 1 if failed else 0
 
 
+def cmd_collect_aws(args: argparse.Namespace) -> int:
+    try:
+        result = collect_aws(
+            accounts=args.accounts.split(","),
+            regions=args.regions.split(","),
+            role_name=args.role,
+            output_dir=args.output,
+        )
+    except ImportError as exc:
+        print(f"oxvara: error: {exc}", file=sys.stderr)
+        return 1
+    print(f"collected {result['stages']} API stage(s) -> {args.output}")
+    for note in result["notes"]:
+        print(f"  - {note}")
+    return 0
+
+
+def cmd_agentcore(args: argparse.Namespace) -> int:
+    _, estates = _load(args)
+    result = build_targets(estates, args.gateway_id or "")
+    with open(args.output, "w", encoding="utf-8") as fh:
+        json.dump(result, fh, indent=2)
+        fh.write("\n")
+    n_targets = len(result["targets"])
+    n_skipped = len(result["skipped"])
+    print(f"agentcore targets: {n_targets} target(s), "
+          f"{n_skipped} operation(s) skipped by validation -> {args.output}")
+    for t in result["targets"]:
+        n_ops = len(json.loads(
+            t["targetConfiguration"]["mcp"]["openApiSchema"]["inlinePayload"]
+        )["paths"])
+        print(f"  target={t['name']} paths={n_ops}")
+    if result["skipped"]:
+        print("skipped:")
+        for s in result["skipped"]:
+            where = f" [{s['operation']}]" if s["operation"] else ""
+            print(f"  ! {s['rule']}{where}: {s['message']}")
+    if result["notes"]:
+        print("notes:")
+        for n in result["notes"]:
+            print(f"  - {n}")
+    return 0
+
+
 def _inputs(p: argparse.ArgumentParser) -> None:
     p.add_argument("inputs", nargs="+", metavar="input", help=INPUT_HELP)
     p.add_argument(
@@ -294,6 +340,33 @@ def build_parser() -> argparse.ArgumentParser:
                    help="lowest severity that fails the run (default: warning)")
     _format(p, ("text", "json", "sarif"))
     p.set_defaults(func=cmd_drift)
+
+    p = sub.add_parser(
+        "collect-aws",
+        help="collect API Gateway estates across AWS accounts and regions",
+    )
+    p.add_argument("--accounts", required=True,
+                   help="comma-separated AWS account IDs, e.g. 123456789012,210987654321")
+    p.add_argument("--regions", required=True,
+                   help="comma-separated regions, e.g. us-east-1,us-west-2")
+    p.add_argument("--role", required=True,
+                   help="IAM role name to assume in each account via STS")
+    p.add_argument("-o", "--output", default="collected",
+                   help="directory to write the collected exports (default: collected)")
+    p.set_defaults(func=cmd_collect_aws)
+
+    p = sub.add_parser(
+        "agentcore-targets",
+        help="emit Bedrock AgentCore Gateway targets for validated operations",
+    )
+    _inputs(p)
+    p.add_argument("-o", "--output", default="agentcore-targets.json",
+                   help="where to write the target definitions "
+                        "(default: agentcore-targets.json)")
+    p.add_argument("--gateway-id", default="",
+                   help="AgentCore gateway ID for the targets "
+                        "(placeholder is used if omitted)")
+    p.set_defaults(func=cmd_agentcore)
     return parser
 
 

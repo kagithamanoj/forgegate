@@ -1,6 +1,6 @@
 """Detect and load any supported estate input, alone or several at once.
 
-Oxvara accepts five kinds of input:
+Oxvara accepts six kinds of input:
 
 - an OpenAPI 3.x YAML or JSON file (governance from x-oxvara blocks),
 - an Apigee bundle directory (apiproxy/ layout),
@@ -8,6 +8,8 @@ Oxvara accepts five kinds of input:
 - a Kong decK state file (a YAML/JSON file with _format_version),
 - an Amazon API Gateway export directory (openapi.json from get-export,
   plus optional stage.json and usage-plans.json),
+- an Amazon API Gateway HTTP API (v2) export directory (openapi.json
+  from apigatewayv2 export-api, plus optional stage.json),
 - a MuleSoft Anypoint export directory (openapi.json/yaml plus
   policies.json with the applied API Manager policies).
 
@@ -27,6 +29,7 @@ import os
 from .exporters.apigee import load_bundle
 from .exporters.apim import load_apim
 from .exporters.aws import is_aws_export, load_aws
+from .exporters.aws_v2 import is_aws_v2_export, load_aws_v2
 from .exporters.kong import is_deck_file, load_deck
 from .exporters.mulesoft import is_mulesoft_export, load_mulesoft
 from .models import ApiEstate
@@ -43,13 +46,19 @@ def split_input(spec: str) -> tuple[str, str]:
 
 
 def detect_source(path: str) -> str:
-    """Return 'apigee', 'aws', 'mulesoft', 'apim', 'kong', or 'openapi'."""
+    """Return 'apigee', 'aws', 'mulesoft', 'apim', 'kong', or 'openapi'.
+
+    The v2 check runs before the v1 AWS check: both match on
+    x-amazon-apigateway markers, but the v2 markers are more specific.
+    """
     path, _ = split_input(path)
     if os.path.isdir(path):
         if os.path.isdir(os.path.join(path, "apiproxy")) or os.path.isdir(
             os.path.join(path, "proxies")
         ):
             return "apigee"
+        if is_aws_v2_export(path):
+            return "aws"
         if is_aws_export(path):
             return "aws"
         if is_mulesoft_export(path):
@@ -68,7 +77,12 @@ def load_input(spec: str, gateway_url: str = "") -> ApiEstate:
     if source == "apigee":
         estate = load_bundle(path, gateway)
     elif source == "aws":
-        estate = load_aws(path, gateway)
+        # v2 and v1 share the "aws" source label; the loader is picked
+        # by the more specific detection above.
+        if is_aws_v2_export(path):
+            estate = load_aws_v2(path, gateway)
+        else:
+            estate = load_aws(path, gateway)
     elif source == "mulesoft":
         estate = load_mulesoft(path, gateway)
     elif source == "apim":

@@ -112,9 +112,17 @@ with the export. API-key requirements, Cognito user pool and Lambda
 authorizers map to auth, with OpenAPI semantics (alternatives: weakest
 wins; schemes in one requirement: strongest wins). Rate limits are the
 tightest of stage default, stage method settings, usage plan throttle
-and quota, and usage plan method throttles. IAM (SigV4) auth is reported,
-not modeled. Tools call the stage invoke URL; integration URIs are kept
-as the upstream so a gateway bypass is caught. See `examples/aws/`.
+and quota, and usage plan method throttles. IAM methods are modeled as
+SigV4 and signed in generated servers. Tools call the stage invoke URL;
+integration URIs are kept as the upstream so a gateway bypass is caught.
+See `examples/aws/`.
+
+**Amazon API Gateway (HTTP API, v2).** A directory with the export
+(`aws apigatewayv2 export-api --specification OAS30`), plus `stage.json`
+(`get-stage`) for throttling. JWT authorizers map to oauth2, Lambda
+authorizers to bearer, IAM to SigV4. Throttling comes from
+`DefaultRouteSettings` and per-route `RouteSettings`. See
+`examples/aws/http-api/`.
 
 **OpenAPI 3.x.** Governance comes from `x-oxvara` blocks: one at the
 root for estate defaults, one per operation to override. See
@@ -164,6 +172,68 @@ guessed at.
 | `oxvara inspect <inputs...>` | Operations and inherited policy, per input |
 | `oxvara diff <inputs...>` | Dry run of the tools `compile` would produce |
 | `oxvara compile <inputs...> -o server.py [--lock FILE]` | Generate the MCP server |
+| `oxvara collect-aws --accounts IDS --regions REGIONS --role NAME -o DIR` | Collect API Gateway estates across AWS accounts and regions via STS assume-role; writes the aws.py directory layout |
+| `oxvara agentcore-targets <inputs...> -o targets.json [--gateway-id ID]` | Emit Bedrock AgentCore Gateway targets for operations that pass the strict pack |
+
+## AgentCore Gateway targets
+
+After `oxvara validate` passes, `oxvara agentcore-targets` turns the
+governed operations into Bedrock AgentCore Gateway target definitions,
+one per input estate. Each target carries an OpenAPI 3.x document for
+exactly the operations that passed the strict pack, plus the outbound
+auth mapping AgentCore needs:
+
+```bash
+oxvara agentcore-targets examples/aws/orders-api -o targets.json \
+  --gateway-id gw-abc123
+```
+
+The output follows the `CreateGatewayTarget` shape: `targetConfiguration`
+with the spec as `inlinePayload`, and `credentialProviderConfigurations`
+mapping Oxvara auth kinds to AgentCore types (apiKey to `API_KEY`,
+bearer/basic to `API_KEY` with the Authorization header and prefix,
+oauth2 to `OAUTH`). Two values must come from your AWS account before
+the target can be registered, and the output marks them: the
+`gatewayIdentifier`, and each credential provider's `providerArn`
+(create the providers in AgentCore Identity first). Operations that fail
+validation are listed under `skipped`, never silently dropped.
+
+## Collecting from live AWS
+
+`oxvara collect-aws` reads REST APIs through the live API Gateway APIs
+across an AWS Organization and writes them in the layout the AWS importer
+reads, so one inventory and drift gate can cover the whole org:
+
+```bash
+pip install "oxvara[aws]"  # boto3, only needed for live collection
+
+oxvara collect-aws \
+  --accounts 123456789012,210987654321 \
+  --regions us-east-1,us-west-2 \
+  --role OxvaraCollector \
+  -o collected/
+
+oxvara inventory collected/*/*/*/
+```
+
+The command assumes the named IAM role in each account via STS, then for
+each region lists REST APIs, exports each stage as OpenAPI, and reads the
+stage and usage plans. APIs that fail to export are reported as notes,
+never silently skipped. AWS API throttling is retried with exponential
+backoff.
+
+IAM permissions required. On your own credentials: `sts:AssumeRole` for
+the role in each target account. On the assumed role in each account:
+
+- `apigateway:GetRestApis`
+- `apigateway:GetStages`
+- `apigateway:GetStage`
+- `apigateway:GetExport`
+- `apigateway:GetUsagePlans`
+
+> Note: live-AWS collection has not been tested against real AWS APIs yet.
+> It was built and verified with mocked boto3 clients only. If you run it
+> against a real org, please report what you find.
 
 ## Policy packs
 
@@ -199,6 +269,7 @@ Credentials always come from the environment:
 | `oauth2` | `OXVARA_OAUTH_TOKEN_URL`, `_CLIENT_ID`, `_CLIENT_SECRET` [+ `_SCOPE`, `_AUDIENCE`, `_RESOURCE`] | Client-credentials token, cached until expiry |
 | `oauth2`, per user | the above + `OXVARA_OAUTH_SUBJECT_TOKEN` [+ `_SUBJECT_TOKEN_TYPE`] | RFC 8693 token exchange of the user's token, cached per subject |
 | `oauth2`, pre-issued | `OXVARA_OAUTH_ACCESS_TOKEN` | A token already issued for the upstream |
+| `sigv4` | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` [+ `AWS_SESSION_TOKEN`, `AWS_REGION`] | AWS SigV4-signed request to API Gateway (region parsed from the invoke URL when unset) |
 
 Per the MCP authorization spec, the token an MCP client presents to the
 server is never forwarded upstream.
@@ -226,9 +297,7 @@ MuleSoft importers; multi-gateway merge; inventory; `strict` and
 servers with OAuth2 (client credentials, RFC 8693 exchange), audit log,
 tool annotations and injection-safe codegen; CI on Python 3.10 to 3.13.
 
-**Not built yet:** API Gateway HTTP APIs (v2) importer; SigV4 signing for
-IAM-authorized methods; multi-account collection; live import from
-gateway management APIs; remote (HTTP) MCP transport with RFC 9728
+**Not built yet:** live import from gateway management APIs; remote (HTTP) MCP transport with RFC 9728
 metadata; per-consumer/per-product policy; a shared rate budget across
 replicas. See the roadmap in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 

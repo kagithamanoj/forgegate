@@ -1,0 +1,1 @@
+{"ApiId":"z9y8x7w6v5","CreatedDate":"2026-10-01T00:00:00Z","DefaultRouteSettings":{"ThrottlingBurstLimit":500,"ThrottlingRateLimit":100.0},"RouteSettings":{"DELETE /items/{itemId}":{"ThrottlingBurstLimit":10,"ThrottlingRateLimit":5.0}},"StageName":"$default"}

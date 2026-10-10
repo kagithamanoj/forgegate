@@ -226,7 +226,8 @@ def _auth_headers(kind, name, location):
 
     Credentials always come from the environment, never from the spec:
     OXVARA_API_KEY, OXVARA_BEARER_TOKEN, OXVARA_BASIC_CREDENTIALS, and the
-    OXVARA_OAUTH_* variables for oauth2 (see _oauth2_token).
+    OXVARA_OAUTH_* variables for oauth2 (see _oauth2_token). SigV4 uses
+    the standard AWS_* variables (see _sigv4_headers).
     """
     if kind == "apiKey":
         key = os.environ.get("OXVARA_API_KEY", "")
@@ -242,6 +243,102 @@ def _auth_headers(kind, name, location):
     if kind == "oauth2":
         return {"Authorization": "Bearer " + _oauth2_token()}
     return {}
+
+
+def _sigv4_headers(method, url, params, payload_bytes):
+    """Sign a request with AWS SigV4 for IAM-authorized API Gateway methods.
+
+    Credentials come from the standard environment variables:
+    AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, optional AWS_SESSION_TOKEN,
+    and AWS_REGION (or parsed from an execute-api URL). Pure stdlib, no
+    extra dependency.
+    """
+    import datetime
+    import hashlib
+    import hmac
+
+    key_id = os.environ.get("AWS_ACCESS_KEY_ID", "")
+    secret = os.environ.get("AWS_SECRET_ACCESS_KEY", "")
+    token = os.environ.get("AWS_SESSION_TOKEN", "")
+    if not (key_id and secret):
+        raise OxvaraError(
+            "sigv4 required: set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY "
+            "(plus AWS_SESSION_TOKEN when using temporary credentials)"
+        )
+    region = os.environ.get("AWS_REGION", "") or os.environ.get("AWS_DEFAULT_REGION", "")
+    parsed = urllib.parse.urlparse(url)
+    host = parsed.netloc
+    if not region:
+        # https://{apiId}.execute-api.{region}.amazonaws.com
+        parts = host.split(".")
+        if len(parts) >= 4 and parts[1] == "execute-api":
+            region = parts[2]
+    if not region:
+        raise OxvaraError(
+            "sigv4 required: set AWS_REGION (or AWS_DEFAULT_REGION)"
+        )
+    service = "execute-api"
+    now = datetime.datetime.now(datetime.timezone.utc)
+    amz_date = now.strftime("%Y%m%dT%H%M%SZ")
+    date_stamp = now.strftime("%Y%m%d")
+
+    def _encode(value):
+        return urllib.parse.quote(str(value), safe="-_.~")
+
+    # Canonical URI: each path segment encoded, slashes preserved.
+    canonical_uri = "/" + "/".join(
+        _encode(seg) for seg in parsed.path.split("/")[1:]
+    ) if parsed.path else "/"
+    # Canonical query string: sorted by name, then value.
+    query = []
+    for k, v in (params or {}).items():
+        if isinstance(v, (list, tuple)):
+            for item in v:
+                query.append((_encode(k), _encode(item)))
+        else:
+            query.append((_encode(k), _encode(v)))
+    canonical_qs = "&".join(f"{k}={v}" for k, v in sorted(query))
+
+    headers = {"host": host, "x-amz-date": amz_date}
+    if token:
+        headers["x-amz-security-token"] = token
+    signed = ";".join(sorted(headers))
+    canonical_headers = "".join(f"{k}:{v}\n" for k, v in sorted(headers.items()))
+    payload_hash = hashlib.sha256(payload_bytes or b"").hexdigest()
+    canonical = "\n".join([
+        method.upper(), canonical_uri, canonical_qs,
+        canonical_headers, signed, payload_hash,
+    ])
+    scope = f"{date_stamp}/{region}/{service}/aws4_request"
+    to_sign = "\n".join([
+        "AWS4-HMAC-SHA256", amz_date, scope,
+        hashlib.sha256(canonical.encode()).hexdigest(),
+    ])
+
+    def _hmac(key, msg):
+        return hmac.new(key, msg.encode(), hashlib.sha256).digest()
+
+    signing = _hmac(
+        _hmac(
+            _hmac(
+                _hmac(("AWS4" + secret).encode(), date_stamp),
+                region,
+            ),
+            service,
+        ),
+        "aws4_request",
+    )
+    signature = hmac.new(signing, to_sign.encode(), hashlib.sha256).hexdigest()
+    out = {
+        "x-amz-date": amz_date,
+        "Authorization": (
+            f"AWS4-HMAC-SHA256 Credential={key_id}/{scope}, "
+            f"SignedHeaders={signed}, Signature={signature}"
+        ),
+    }
+    if token:
+        out["x-amz-security-token"] = token
+    return out
 
 
 '''
@@ -348,10 +445,11 @@ def _generate_tool(estate: ApiEstate, ep: Endpoint, tool_name: str, func: str) -
     out.append(f"    _audit('call', {t}, args=_redact({{{audit_args}}}))")
     auth = ep.policy.auth
     out.append("    _ox_headers = {'Accept': 'application/json'}")
-    out.append(
-        f"    _ox_headers.update(_auth_headers({auth.kind!r}, "
-        f"{auth.name!r}, {auth.location!r}))"
-    )
+    if auth.kind != "sigv4":
+        out.append(
+            f"    _ox_headers.update(_auth_headers({auth.kind!r}, "
+            f"{auth.name!r}, {auth.location!r}))"
+        )
     for wire, ident, _, loc, req in args:
         if loc == "header":
             guard = "" if req else f"if {ident} is not None:\n        "
@@ -391,12 +489,30 @@ def _generate_tool(estate: ApiEstate, ep: Endpoint, tool_name: str, func: str) -
     out.append(
         f"    _ox_url = {base_expr} + _fill_path({ep.path!r}, {{{path_values}}})"
     )
-    out.append(
-        "    _ox_resp = requests.request(\n"
-        f"        {ep.method!r}, _ox_url, headers=_ox_headers, params=_ox_params,\n"
-        f"        json=_ox_payload, timeout={int(ep.policy.timeout)},\n"
-        "    )"
-    )
+    if auth.kind == "sigv4":
+        # SigV4 signs the exact bytes sent, so serialize the payload here
+        # and sign after the URL, params and body are all known.
+        out.append(
+            "    _ox_body_bytes = (json.dumps(_ox_payload, separators=(',', ':'), "
+            "sort_keys=True).encode() if _ox_payload else b'')"
+        )
+        out.append(
+            f"    _ox_headers.update(_sigv4_headers({ep.method!r}, _ox_url, "
+            "_ox_params, _ox_body_bytes))"
+        )
+        out.append(
+            "    _ox_resp = requests.request(\n"
+            f"        {ep.method!r}, _ox_url, headers=_ox_headers, params=_ox_params,\n"
+            f"        data=_ox_body_bytes or None, timeout={int(ep.policy.timeout)},\n"
+            "    )"
+        )
+    else:
+        out.append(
+            "    _ox_resp = requests.request(\n"
+            f"        {ep.method!r}, _ox_url, headers=_ox_headers, params=_ox_params,\n"
+            f"        json=_ox_payload, timeout={int(ep.policy.timeout)},\n"
+            "    )"
+        )
     out.append(f"    _audit('response', {t}, status=_ox_resp.status_code)")
     out.append("    _ox_resp.raise_for_status()")
     out.append(f"    return _guard_response({t}, _ox_resp.text)")
