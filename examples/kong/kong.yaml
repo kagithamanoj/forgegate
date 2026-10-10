@@ -1,0 +1,56 @@
+# A Kong Gateway 3.x decK state file, as written by `deck gateway dump`.
+# Try it:  oxvara inspect examples/kong/kong.yaml@https://kong.example.com
+_format_version: "3.0"
+
+services:
+  - name: orders
+    url: http://orders.internal:8080
+    plugins:
+      - name: key-auth
+        config:
+          key_names: [x-api-key]
+      - name: rate-limiting
+        config:
+          second: 5
+          policy: local
+    routes:
+      - name: list-orders
+        paths: [/orders]
+        methods: [GET]
+        plugins:
+          - name: rate-limiting
+            config:
+              minute: 120
+              policy: local
+      - name: create-order
+        paths: [/orders]
+        methods: [POST]
+      - name: get-order
+        paths: ["~/orders/(?<orderId>[^/]+)$"]
+        methods: [GET]
+      - name: legacy-export
+        paths: [/orders/export]
+        methods: [GET]
+        plugins:
+          - name: request-termination
+            config:
+              status_code: 410
+
+  - name: payments
+    url: http://payments.internal:8443
+    routes:
+      - name: refund-payment
+        paths: ["~/payments/(?<paymentId>[^/]+)/refund$"]
+        methods: [POST]
+
+plugins:
+  - name: openid-connect
+    service: payments
+    config:
+      issuer: https://idp.example.com/.well-known/openid-configuration
+      auth_methods: [bearer]
+  - name: rate-limiting-advanced
+    service: payments
+    config:
+      limit: [100, 2000]
+      window_size: [60, 3600]

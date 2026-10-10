@@ -12,6 +12,14 @@ def test_detect_source():
     assert detect_source(os.path.join(EXAMPLES, "apigee")) == "apigee"
     assert detect_source(os.path.join(EXAMPLES, "apim")) == "apim"
     assert detect_source(os.path.join(EXAMPLES, "petstore.yaml")) == "openapi"
+    assert detect_source(os.path.join(EXAMPLES, "kong", "kong.yaml")) == "kong"
+
+
+def test_gateway_url_suffix_overrides_openapi_base():
+    estate = load_input(
+        os.path.join(EXAMPLES, "petstore.yaml") + "@https://gw.example.com/pets/"
+    )
+    assert estate.base_url == "https://gw.example.com/pets"
 
 
 def test_load_input_apigee():
